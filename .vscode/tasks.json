@@ -1,0 +1,29 @@
+{
+  "tasks": [
+    {
+      "type": "cppbuild",
+      "label": "C/C++: g++ build main file",
+      "command": "/usr/bin/g++",
+      "args": [
+        "-fdiagnostics-color=always",
+        "-I${workspaceFolder}/include",
+        "-g",
+        "${workspaceFolder}/src/**.cpp",
+        "-o",
+        "${workspaceFolder}/bin/runner"
+      ],
+      "options": {
+        "cwd": "${fileDirname}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "Build main file."
+    }
+  ],
+  "version": "2.0.0"
+}

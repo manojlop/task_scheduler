@@ -58,7 +58,6 @@ This document specifies the design and implementation of a concurrent task sched
         *   `const std::function<void()> work`: The callable entity representing the task's work. Stored by value, assumes tasks are lightweight enough to copy/move `std::function`.
         *   `TaskState state`: The current lifecycle state. Initialized to `PENDING` or `READY`.
         *   `const std::vector<TaskID> dependencies`: A list of `TaskID`s this task depends upon. Immutable after creation.
-        *   `std::vector<TaskID> dependents`: A list of `TaskID`s that depend on this task. Populated when tasks are added. Mutable (only additions).
         *   `std::atomic<std::size_t> unmet_dependency_count`: Initialized to `dependencies.size()`. Atomically decremented when a dependency completes. Task becomes `READY` when this reaches zero.
         *   `std::mutex task_mutex_`: (Considered, but deferred for initial scope). A mutex specific to this task instance for fine-grained locking if needed in future extensions. The initial design relies on coarser locking in the `Scheduler`.
     *   **`Scheduler::tasks_`**: `std::unordered_map<TaskID, std::shared_ptr<Task>>`. Stores all tasks managed by the scheduler, allowing O(1) average time lookup by `TaskID`. `std::shared_ptr` is used to manage the lifetime of `Task` objects, allowing them to be referenced from the map, the ready queue (implicitly), and potentially by dependent tasks without manual lifetime tracking.
