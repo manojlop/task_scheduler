@@ -7,8 +7,6 @@
 #include <functional>
 #include <atomic>
 
-using namespace std;
-
 class Task{
 private:
   static TaskID ids;
@@ -25,9 +23,9 @@ private:
   // ---------------------
   // Parameters: 
   // - none
-  const function<void()> work;
+  const std::function<void()> work;
 
-  const vector<TaskID> dependencies;
+  const std::vector<TaskID> dependencies;
   // vector<TaskID> dependents; // Moved to scheduler, as the task doesn't need to know who depends on it
 
   // Design tradeoffs unmet_count:
@@ -46,7 +44,7 @@ private:
     Does the task need to know who else it depends on often?
   */
   // Atomic:
-  atomic<TaskID> unmetCount;
+  std::atomic<TaskID> unmetCount;
 
 public:
 
@@ -54,7 +52,7 @@ public:
   // Default constructor
   Task() : id(ids++), state(READY), unmetCount(0) {}
 
-  Task(function<void()> func, const vector<TaskID> dep = vector<TaskID>()) : id(ids++), work(func), dependencies(dep), unmetCount(dep.size()) {
+  Task(std::function<void()> func, const std::vector<TaskID> dep = std::vector<TaskID>()) : id(ids++), work(func), dependencies(dep), unmetCount(dep.size()) {
     state = dep.size() == 0 ? READY : PENDING;
   }
 
@@ -80,7 +78,7 @@ public:
   }
 
   void run(){
-    work.operator()();
+    work();
   }
   
   // Operators

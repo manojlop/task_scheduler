@@ -5,14 +5,12 @@
 
 #include <mutex>
 
-using namespace std;
-
 // Sceduler is to be singleton class, because we only need on instance of it
 class Scheduler{
 private:
   static Scheduler* scheduler;
 
-  static mutex mtx;
+  static std::mutex mtx;
 
   // Constructors -> Private default constructor
   Scheduler() {}
@@ -26,7 +24,7 @@ public:
       // RAII -> Binds life cycle of a resource that must be aquired before use to lifetime of object
       // On creation, attempts to take ownership of given mutex
       // When control leaves the scope, lock_guard is desctructed and mutex is released
-      lock_guard<mutex> lock(mtx);
+      std::lock_guard<std::mutex> lock(mtx);
       if(scheduler == nullptr){
         scheduler = new Scheduler();
       }
