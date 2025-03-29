@@ -1,5 +1,5 @@
-#ifndef __SCHEDULER__
-#define __SCHEDULER__
+#ifndef SCHEDULER_SCHEDULER_H_
+#define SCHEDULER_SCHEDULER_H_
 
 #include "types_defines.h"
 

@@ -1,5 +1,5 @@
-#ifndef __TYPES_DEFINES__
-#define __TYPES_DEFINES__
+#ifndef SCHEDULER_TYPES_DEFINES_H_
+#define SCHEDULER_TYPES_DEFINES_H_
 
 #include <cstddef>
 

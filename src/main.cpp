@@ -5,18 +5,18 @@
 
 #include <iostream>
 
+using namespace std;
+
 void print_f(){
   cout << "123" << endl;
 }
 
 int main() {
 
-  Task task1(print_f);
-  Task task2(task1);
+  Task task1(1, print_f);
   Scheduler* scheduler = Scheduler::getScheduler();
 
   task1.run();
-  task2.run();
 
   return 0;
 }
