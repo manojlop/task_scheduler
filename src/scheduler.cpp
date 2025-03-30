@@ -1,11 +1,38 @@
 #include "scheduler.h"
 
 TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>& dependencies){
-  return TaskID();
+  // Todo : check id availability
+
+  std::lock_guard<std::mutex> lck(mtx_);
+  // Return current value and increment
+  // atomic variable cannot be in make_pair
+  TaskID currentId = id_.fetch_add(1);
+  std::shared_ptr<Task> ptr(new Task(currentId, func, dependencies));
+  // Todo : check cyclical dependencies before inserting -> return -1 if cycle is created
+  tasks_.emplace(std::make_pair(currentId, ptr));
+  for(auto dep : dependencies){
+    downwardDependencies_[dep].push_back(id_);
+  }
+  // Todo : Check if said task is completed -> put to ready immediately if is
+  return currentId;
 }
 
 TaskID Scheduler::addTask(Task &&task){
-  return TaskID();
+  // Todo : check id availability
+
+  std::lock_guard<std::mutex> lck(mtx_);
+  // Return current value and increment
+  // atomic variable cannot be in make_pair
+  TaskID currentId = id_.fetch_add(1);
+  std::shared_ptr<Task> ptr = std::make_shared<Task>(std::move(task));
+  // Todo : check cyclical dependencies before inserting -> return -1 if cycle is created
+  // Return current value and increment
+  tasks_.emplace(std::make_pair(currentId, ptr));
+  for(auto dep : task.dependencies_){
+    downwardDependencies_[dep].push_back(id_);
+  }
+  // Todo : Check if said task is completed -> put to ready immediately if is
+  return currentId;
 }
 
 void Scheduler::start(){
@@ -13,6 +40,11 @@ void Scheduler::start(){
 }
 
 void Scheduler::stop(){
+}
+
+
+std::shared_ptr<Task> Scheduler::createTask(std::function<void()> func, const std::vector<TaskID> &dependencies){
+  return std::shared_ptr<Task>();
 }
 
 void Scheduler::Worker::fetch_and_execute(){
@@ -42,11 +74,19 @@ void Scheduler::Worker::fetch_and_execute(){
     // Todo : do logging via logger
     std::cout << "Worker: " << this->id_ << " is processing task: " << currTaskID << "\n";
     
+    bool succesfullTask = true;
     // Executing the task
+    if(task_ptr){
+      try{
+        task_ptr->run();
+      } catch (...){
+        succesfullTask = false;
+      }
+    }
 
     // Check if finished correctly (TBD : how to do this?)
     lck.lock();
-    if(1)
+    if(succesfullTask)
       task_ptr->setState(t_TaskState::COMPLETED);
     else 
       task_ptr->setState(t_TaskState::FAILED);
@@ -70,3 +110,4 @@ void Scheduler::Worker::run()
 
   work.join();
 }
+

@@ -20,9 +20,9 @@ private:
     2. Using static, non-atomic variable calculations is not thread-safe
   */
   // static TaskID ids; 
-  const TaskID id;
+  const TaskID id_;
 
-  t_TaskState state;
+  t_TaskState state_;
 
   /* Explanation:
   Class template from functional - General purpose, polymorphic function wrapper
@@ -35,9 +35,9 @@ private:
   // ---------------------
   // Parameters: 
   // - none
-  const std::function<void()> work;
+  const std::function<void()> work_;
 
-  const std::vector<TaskID> dependencies;
+  const std::vector<TaskID> dependencies_;
 
   // vector<TaskID> dependents; // Moved to scheduler, as the task doesn't need to know who depends on it
 
@@ -57,18 +57,18 @@ private:
     Does the task need to know who else it depends on often?
   */
   // Atomic:
-  std::atomic<TaskID> unmetCount;
+  std::atomic<TaskID> unmetCount_;
 
   // Only the Scheduler should be able to run the task
   void run() const{
     // Todo : check the state of function
-    if(work)
-      work();
+    if(work_)
+      work_();
     // else 
       // Todo : handle error when no work function
   }
 
-  std::string description;
+  std::string description_;
 
 public:
 
@@ -76,8 +76,8 @@ public:
   // Default constructor -> We don't need it as it doesn't specify task
   Task() = delete;
 
-  Task(int identifier, std::function<void()> func, const std::vector<TaskID> dep = std::vector<TaskID>(), std::string descr = "") : id(identifier), work(func), dependencies(dep), unmetCount(dep.size()), description(descr) {
-    state = dep.size() == 0 ? READY : PENDING;
+  Task(int identifier, std::function<void()> func, const std::vector<TaskID>& dep = std::vector<TaskID>(), std::string descr = "") : id_(identifier), work_(func), dependencies_(dep), unmetCount_(dep.size()), description_(descr) {
+    state_ = dep.size() == 0 ? READY : PENDING;
   }
 
   // Copy constructor -> Tasks shouldn't be copyiable
@@ -87,35 +87,36 @@ public:
   // Move constructor -> Needed, for efficiently transferring ownership of resources.
   // std::function and std::vector are movable.
   // Moving a task (when emplacing it into Scheduler's map) should be more efficient than copying(if it were allowed)
-  Task(Task&& task) = default; // Works here because members std::function, std::vector, std::atomic are all MOVABLE themselves, and const members don't prevent moves
+  Task(Task&& task) noexcept : id_(task.id_), work_(std::move(task.work_)), dependencies_(std::move(task.dependencies_)) {}  // cannot be default as it has const fields (nor would it be able if it had references or atomic fields)
+  // ! Works here because members std::function, std::vector, std::atomic are all MOVABLE themselves, and const members don't prevent moves!
 
   // Desctructor -> TBD: No pointers -> not needed
   // ~Task() {}
 
   // Functions
   TaskID getID() const {
-    return id;
+    return id_;
   }
 
   /*
   Accessing state might need external synchronization (locking in the Scheduler) depending on when/where it's called, as it's mutable and potentially accessed by multiple threads
   */
   t_TaskState getState() const {
-    return state;
+    return state_;
   }
 
   /*
   
   */
   void setState(t_TaskState st){
-    state = st;
+    state_ = st;
   }
 
   /*
   Returning the value of an atomic requires specifying a memory order. std::memory_order_relaxed is often sufficient for just reading the value if you don't need synchronization guarantees with other variables based on this read
   */
   TaskID getUnmetCount() const {
-    return unmetCount.load(std::memory_order_relaxed);
+    return unmetCount_.load(std::memory_order_relaxed);
   }
 
   // Operators

@@ -121,6 +121,8 @@ public:
   // Called before Scheduler ends its life, makes sure that all threads are properly stopped. TBD : When does scheduler end?
   void stop();
 
+  std::shared_ptr<Task> createTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
+
   // Operators
   Scheduler& operator=(const Scheduler&) = delete;
   Scheduler& operator=(Scheduler&& rhs) = delete; 
