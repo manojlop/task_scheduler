@@ -13,10 +13,10 @@ void print_f(){
 
 int main() {
 
-  Task task1(1, print_f);
-  Scheduler* scheduler = Scheduler::getScheduler();
+  // Task task1(1, print_f);
+  // Scheduler scheduler;
 
-  task1.run();
+  // task1.run();
 
   return 0;
 }

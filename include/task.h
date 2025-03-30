@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 #include <atomic>
+#include <string>
 
 class Scheduler;
 
@@ -67,13 +68,15 @@ private:
       // Todo : handle error when no work function
   }
 
+  std::string description;
+
 public:
 
   // Constructors
   // Default constructor -> We don't need it as it doesn't specify task
   Task() = delete;
 
-  Task(int identifier, std::function<void()> func, const std::vector<TaskID> dep = std::vector<TaskID>()) : id(identifier), work(func), dependencies(dep), unmetCount(dep.size()) {
+  Task(int identifier, std::function<void()> func, const std::vector<TaskID> dep = std::vector<TaskID>(), std::string descr = "") : id(identifier), work(func), dependencies(dep), unmetCount(dep.size()), description(descr) {
     state = dep.size() == 0 ? READY : PENDING;
   }
 
@@ -99,6 +102,13 @@ public:
   */
   t_TaskState getState() const {
     return state;
+  }
+
+  /*
+  
+  */
+  void setState(t_TaskState st){
+    state = st;
   }
 
   /*
