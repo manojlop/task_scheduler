@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <thread>
 #include <iostream>
+#include <algorithm>
 
 class Scheduler{
   // Implementation of class Worker
@@ -20,12 +21,6 @@ class Scheduler{
     Scheduler& scheduler_;
 
     const int id_;
-
-
-    bool has_task = false;
-    int currTaskID = -1;
-
-    std::mutex mtx;
 
   public:
     // Constructors
@@ -37,9 +32,6 @@ class Scheduler{
     ~Worker() = default;
 
     // Functions
-    void fetch_and_execute();
-    void wait_stop();
-
     void run();
 
 
@@ -50,9 +42,9 @@ class Scheduler{
 private:
 
   // Used to prevent locking the mutex for simple operations
-  std::atomic<TaskID> id_;
+  std::atomic<TaskID> id_ {1};
 
-  std::atomic<int> workerId;
+  std::atomic<int> workerId {0};
 
   std::mutex mtx_;
 
@@ -67,6 +59,17 @@ private:
   // Using unique ptr to handle pointers to specific workers, as they are memory safe
   std::vector<std::unique_ptr<Worker>> workers_;
 
+  // Manages OS thread resource (holds actual std::thread objects)
+  // Needed to start the threads
+  // join() the threads during shutdown
+  std::vector<std::thread> worker_threads_;
+
+  /*
+  Why having both workers_ and worker_threads_?
+  - We separate the what(worker -> execution) from how (thread -> OS context)
+  - 
+  */
+
   // Stores IDs of downward dependent tasks fo easier handling when task finishes work
   std::unordered_map<TaskID, std::vector<TaskID>> downwardDependencies_;
 
@@ -74,17 +77,19 @@ private:
   std::condition_variable workAvailable_;
 
   // To inform workers that stop has been requested -> immediate stoppage of execution
-  std::condition_variable stop_requested_;
+  // std::condition_variable stop_requested_; // We don't need condition variable, as we don't have construct to wait -> kill
+  std::atomic<bool> stop_requested_;
 
 public:
 
 
   // Constructors -> Private default constructor
-  Scheduler(int n = 2) : id_(1), threadNumber_(n){
+  Scheduler(int n = 2) : id_(1), threadNumber_(n), stop_requested_(false) {
     // Initialize workers after the constructor's initialization list
     workers_.reserve(n);  // Reserve space for efficiency
     for (int i = 0; i < n; i++) {
-        workers_.push_back(std::unique_ptr<Worker>(new Worker(*this, workerId++)));
+      // Todo : std::make_unique() in C++14
+      workers_.push_back(std::unique_ptr<Worker>(new Worker(*this, workerId.fetch_add(1))));
     }
   }
 
@@ -98,6 +103,7 @@ public:
   ~Scheduler() { 
     // Stop all tasks
     stop();
+    // Do i need to delete task pointers here? -> smart_ptr and unique_ptr handle this for us
   }
 
   // Functions
@@ -112,8 +118,11 @@ public:
   // Variadic template to be able to pass single task, or multiple tasks in a vector or some other structure
   // Handled with recursion
   // Bool is to be able to check cycles in a graph on addition
-  template<typename T, typename... args>
-  std::vector<TaskID> addTask(T task, args... tasks);
+  // template<typename T, typename... args>
+  // std::vector<TaskID> addTask(T task, args... tasks);
+
+  // Notify all dependents and put into readyTasks if all dependencies match
+  void notifyDependents(TaskID taskId);
 
   // Creates worker threads and starts the scheduler -> TBD : should it start if no assigned tasks?
   void start();
@@ -131,7 +140,7 @@ public:
 
 #endif
 
-template <typename T, typename... args>
-inline std::vector<TaskID> Scheduler::addTask(T task, args... tasks){
-  return std::vector<TaskID>();
-}
+// template <typename T, typename... args>
+// inline std::vector<TaskID> Scheduler::addTask(T task, args... tasks){
+//   return std::vector<TaskID>();
+// }

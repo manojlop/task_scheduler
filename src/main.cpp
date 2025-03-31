@@ -1,22 +1,14 @@
-#include <iostream>
+#include "tests.h"
 
-#include "task.h"
-#include "scheduler.h"
+std::mutex globalMutex;
 
-#include <iostream>
-
-using namespace std;
-
-void print_f(){
-  cout << "123" << endl;
+void safe_print(const std::string& msg){
+    std::lock_guard<std::mutex> lock(globalMutex); 
+    std::cout << msg << std::endl;
 }
 
 int main() {
+  int ret = sanity_test();
 
-  // Task task1(1, print_f);
-  // Scheduler scheduler;
-
-  // task1.run();
-
-  return 0;
+  return ret;
 }

@@ -76,7 +76,7 @@ public:
   // Default constructor -> We don't need it as it doesn't specify task
   Task() = delete;
 
-  Task(int identifier, std::function<void()> func, const std::vector<TaskID>& dep = std::vector<TaskID>(), std::string descr = "") : id_(identifier), work_(func), dependencies_(dep), unmetCount_(dep.size()), description_(descr) {
+  Task(int identifier = 0, std::function<void()> func = {}, const std::vector<TaskID>& dep = std::vector<TaskID>(), std::string descr = "") : id_(identifier), work_(func), dependencies_(dep), unmetCount_(dep.size()), description_(descr) {
     state_ = dep.size() == 0 ? READY : PENDING;
   }
 
@@ -117,6 +117,17 @@ public:
   */
   TaskID getUnmetCount() const {
     return unmetCount_.load(std::memory_order_relaxed);
+  }
+
+  /*
+  Decrements and returns true if no remaining dependencies
+  */
+  bool decrement_unmet_dependencies(){
+    unmetCount_.fetch_sub(1);
+    if(unmetCount_.load() == 0)
+      return true;
+    else 
+      return false;
   }
 
   // Operators
