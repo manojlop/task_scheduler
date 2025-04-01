@@ -42,9 +42,9 @@ class Scheduler{
 private:
 
   // Used to prevent locking the mutex for simple operations
-  std::atomic<TaskID> id_ {1};
+  std::atomic<TaskID> id_;
 
-  std::atomic<int> workerId {0};
+  std::atomic<int> workerId_;
 
   std::mutex mtx_;
 
@@ -56,13 +56,16 @@ private:
 
   std::deque<TaskID> readyTasks_;
 
+  // Indicator vector to show if the thread is busy
+  std::vector<std::atomic<bool>> threadBusy_;
+
   // Using unique ptr to handle pointers to specific workers, as they are memory safe
   std::vector<std::unique_ptr<Worker>> workers_;
 
   // Manages OS thread resource (holds actual std::thread objects)
   // Needed to start the threads
   // join() the threads during shutdown
-  std::vector<std::thread> worker_threads_;
+  std::vector<std::thread> workerThreads_;
 
   /*
   Why having both workers_ and worker_threads_?
@@ -78,18 +81,20 @@ private:
 
   // To inform workers that stop has been requested -> immediate stoppage of execution
   // std::condition_variable stop_requested_; // We don't need condition variable, as we don't have construct to wait -> kill
-  std::atomic<bool> stop_requested_;
+  std::atomic<bool> stopRequested_;
 
 public:
 
 
   // Constructors -> Private default constructor
-  Scheduler(int n = 2) : id_(1), threadNumber_(n), stop_requested_(false) {
+  Scheduler(int n = 2) : id_(1), workerId_(0), threadNumber_(n), stopRequested_(false) {
     // Initialize workers after the constructor's initialization list
     workers_.reserve(n);  // Reserve space for efficiency
+    threadBusy_ = std::vector<std::atomic<bool>>(n);
     for (int i = 0; i < n; i++) {
       // Todo : std::make_unique() in C++14
-      workers_.push_back(std::unique_ptr<Worker>(new Worker(*this, workerId.fetch_add(1))));
+      workers_.push_back(std::unique_ptr<Worker>(new Worker(*this, workerId_.fetch_add(1))));
+      threadBusy_[i].store(false);
     }
   }
 
@@ -101,9 +106,13 @@ public:
 
   // Destructor
   ~Scheduler() { 
+    std::cout << "\n******************************************************************************\n";
+    std::cout << "Initiated Scheduler's destructor\n";
     // Stop all tasks
     stop();
     // Do i need to delete task pointers here? -> smart_ptr and unique_ptr handle this for us
+    std::cout << "\nScheduler stopped\n";
+    std::cout << "******************************************************************************\n";
   }
 
   // Functions
