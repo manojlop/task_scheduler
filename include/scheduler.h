@@ -58,9 +58,6 @@ private:
 
   std::deque<TaskID> readyTasks_;
 
-  // Indicator vector to show if the thread is busy
-  std::vector<std::atomic<bool>> threadBusy_;
-
   // Using unique ptr to handle pointers to specific workers, as they are memory safe
   std::vector<std::unique_ptr<Worker>> workers_;
 
@@ -98,11 +95,9 @@ public:
   Scheduler(int n = 2) : id_(1), workerId_(0), threadNumber_(n), stopRequested_(false) {
     // Initialize workers after the constructor's initialization list
     workers_.reserve(n);  // Reserve space for efficiency
-    threadBusy_ = std::vector<std::atomic<bool>>(n);
     for (int i = 0; i < n; i++) {
       // Todo : std::make_unique() in C++14
       workers_.push_back(std::unique_ptr<Worker>(new Worker(*this, workerId_.fetch_add(1))));
-      threadBusy_[i].store(false);
     }
   }
 

@@ -1,187 +1,174 @@
 # Project Specification: A C++11 Implementation of a Concurrent, Dependency-Aware Task Scheduler
 
-## 1. Abstract (v0.0.0)
+## 1. Abstract
 
-This document specifies the design and implementation of a concurrent task scheduling system utilizing C++11 standard library features. The system manages a collection of tasks, potentially with interdependencies forming a Directed Acyclic Graph (DAG), and executes them using a pool of worker threads. Key objectives include achieving correct concurrent execution respecting all specified dependencies, demonstrating the application of C++11 concurrency primitives (`std::thread`, `std::mutex`, `std::condition_variable`), modern C++ idioms (`std::function`, lambdas, smart pointers), and providing a foundation for future extensions. The design emphasizes clarity, correctness, and adherence to C++11 standards. Evaluation focuses on correctness through defined test scenarios.
+This document specifies the design and implementation of a concurrent task scheduling system developed using C++11 standard library features. The system manages a collection of tasks, represented as Directed Acyclic Graphs (DAGs) based on user-defined dependencies, and orchestrates their execution across a configurable pool of worker threads. Key objectives include achieving correct concurrent execution while respecting task dependencies, demonstrating idiomatic application of C++11 concurrency primitives (`std::thread`, `std::mutex`, `std::condition_variable`), memory management features (`std::unique_ptr`, `std::shared_ptr`), and functional programming utilities (`std::function`). The design emphasizes correctness, modularity (via `Scheduler`, `Task`, and nested `Worker` classes), and provides a foundation for future functional and performance enhancements. This document reflects the current implementation state, including external type definitions (`types_defines.h`), the task representation (`task.h`), and the core scheduler logic (`scheduler.h`).
 
 ## 2. Introduction
 
-*   **2.1. Motivation:** The proliferation of multi-core processors necessitates efficient parallel execution models. Many computational problems can be decomposed into smaller tasks, some of which may depend on the results of others. Task scheduling systems provide a framework for managing such task sets and orchestrating their execution on available processing resources, maximizing throughput and resource utilization while respecting execution constraints.
-*   **2.2. Problem Statement:** Design and implement a task scheduler capable of:
-    *   Accepting computational tasks represented as C++ callable entities.
-    *   Managing explicit dependencies between tasks, ensuring a task only executes after its prerequisite tasks have completed successfully.
-    *   Executing independent tasks concurrently using a configurable pool of worker threads.
-    *   Providing mechanisms for adding tasks, initiating execution, and ensuring orderly shutdown.
-    *   Guaranteeing thread safety and avoiding common concurrency pitfalls like race conditions and deadlocks within the scheduler's internal state.
-*   **2.3. Scope and Objectives:**
-    *   Implement the scheduler purely using C++11 standard library features.
-    *   Support a fixed-size thread pool model.
-    *   Handle task dependencies forming a DAG. Cycle detection is outside the initial scope but dependencies implying cycles will lead to tasks never becoming ready.
-    *   Focus on correctness of execution order and basic concurrency. Performance optimization (e.g., minimizing lock contention, work-stealing) is a secondary goal or future work.
-    *   Implement basic exception handling for task execution failures.
-*   **2.4. Contributions:** The primary contribution is a well-documented, C++11-idiomatic implementation of a dependency-aware concurrent scheduler, serving as both a practical utility and an educational example of applying modern C++ concurrency features.
+*   **2.1. Motivation:** With widespread multi-core processors now common, software architectures must be designed to take advantage of parallelism. Many complex problems can be decomposed into smaller, manageable tasks. Often, inherent dependencies exist between these tasks, requiring a structured execution flow. Task scheduling systems address this need by managing task sets, enforcing execution order based on dependencies, and distributing work across available processing resources to enhance throughput and efficiency.
+*   **2.2. Problem Statement:** Design and implement a task scheduler in C++11 capable of:
+    *   Accepting computational tasks defined via `std::function<void()>`.
+    *   Managing explicit dependencies between tasks, ensuring tasks execute only after prerequisites complete.
+    *   Executing independent (ready) tasks concurrently using a fixed-size pool of worker threads.
+    *   Providing a clear API for task submission (`addTask`) and control (`start`, `stop`).
+    *   Guaranteeing thread safety for internal scheduler state using standard C++ synchronization primitives.
+    *   Handling task execution failures and propagating failure states to dependents.
+    *   Ensuring orderly scheduler shutdown, including joining worker threads.
+*   **2.3. Scope and Objectives (Current Implementation):**
+    *   Utilize C++11 standard library features exclusively.
+    *   Implement a fixed-size worker thread pool model.
+    *   Support task dependencies forming a DAG; cycle detection is planned but not yet fully implemented (current rules inherently prevent cycles on single task addition).
+    *   Provide basic exception handling for task execution failures within worker threads.
+    *   Handle failure propagation recursively through the dependency graph.
+    *   Focus on functional correctness and clear C++11 idioms. Performance optimization is deferred.
+*   **2.4. Contributions:** A documented, thread-safe, dependency-aware task scheduler implemented in C++11. Serves as a practical demonstration of modern C++ concurrency, memory management, and design patterns applicable to parallel computing problems.
 
-## 3. System Design
+**3. System Design**
 
-*   **3.1. Architecture Overview:** The system comprises three main components:
-    1.  **Task Representation:** Data structures holding task information, including the work function, state, and dependency relationships.
-    2.  **Scheduler Core:** Manages the task collection, the ready queue, worker threads, and synchronization primitives. It orchestrates the task lifecycle.
-    3.  **Worker Threads:** Execute tasks dequeued from the ready queue.
+*   **3.1. Architecture Overview:** The system is modular, comprising:
+    1.  **`Task` Class (`task.h`):** Represents a single unit of work. Encapsulates a unique ID (`TaskID`), the work itself (`std::function`), dependencies (`std::vector<TaskID>`), current execution state (`t_TaskState`), and dependency tracking (`std::atomic<TaskID> unmetCount_`). Designed to be non-copyable and movable.
+    2.  **`Scheduler` Class (`scheduler.h`):** The central orchestrator. Manages the collection of all tasks, the queue of ready tasks, the worker thread pool, dependency information, and synchronization primitives. Provides the public API for interaction.
+    3.  **`Scheduler::Worker` Class (Nested):** Represents the execution logic for a single worker thread. Each `Worker` instance is associated with a `std::thread` and interacts with the `Scheduler`'s shared resources to fetch and execute tasks.
+    4.  **Type Definitions (`types_defines.h`):** Defines shared types (`TaskID`, `t_TaskState`, `t_Verbosity`) and includes a global mutex (`globalMutex`) and verbosity level (`verbosityPrinted`) for a basic thread-safe printing utility (`safe_print`). *Note: Use of global variables is generally discouraged in larger systems.*
 
     ```
-    +---------------------+      Add Task      +-----------------+      Notify      +----------------+
-    |      User Code      |------------------->| Scheduler Core  |<-----------------| Worker Threads |
-    +---------------------+                    | - Task Map      |                  | (Pool of N)    |
-            | Start/Stop                       | - Ready Queue   |----- Dequeue --->| - Execute Task |
-            |                                  | - Thread Pool   | Task             | - Update State |
-            |                                  | - Sync Prims    |                  +----------------+
-            +--------------------------------->|                 |
-                                               +-----------------+
-                                                  |            ^
-                                                  | Update     | Notify
-                                                  | Task State | Dependents
-                                                  V            |
-                                               +-----------------+
-                                               | Task Objects    |
-                                               | - State         |
-                                               | - Dependencies  |
-                                               | - Unmet Count   |
-                                               +-----------------+
+    +---------------------+      addTask()     +-----------------------------+      notify()      +----------------------+
+    |      User Code      |------------------->| Scheduler                   |<-------------------| Scheduler::Worker    |
+    | (e.g., main.cpp)    |                    | - tasks_ (map<ID, shr_ptr>) |                    | (N instances, each   |
+    +---------------------+                    | - readyTasks_ (deque<ID>)   |---- Dequeue ID --->|  owning no state)    |
+            | Start/Stop                       | - downwardDependencies_     |                    | - Executes Task::run |
+            |                                  | - workers_ (vec<unq_ptr>)   |                    | - Calls notifyDep()  |
+            |                                  | - workerThreads_ (vec<thr>) |                    +----------------------+
+            +--------------------------------->| - mtx_, workAvailable_      |                       ^ | run() executed by
+                                               | - stopRequested_            |                       | V std::thread
+                                               +-----------------------------+------------------+--------------------+
+                                                            |           ^                       | std::thread        |
+                                                            | Update    | Fetch Task*           | (N instances)      |
+                                                            V           |                       +--------------------+
+                                                        +-----------------+
+                                                        | Task Objects    |
+                                                        | - state_        |
+                                                        | - unmetCount_   |
+                                                        | - dependencies_ |
+                                                        | - work_         |
+                                                        +-----------------+
     ```
     *Figure 1: High-Level System Architecture*
 
 *   **3.2. Data Structures:**
-    *   **`TaskID`**: A type alias for `std::size_t`, representing unique task identifiers.
-    *   **`TaskState`**: An `enum class TaskState { PENDING, READY, RUNNING, COMPLETED, FAILED };` defining the possible states of a task.
-    *   **`Task`**: A `struct` or `class` encapsulating task details:
-        *   `const TaskID id`: Unique identifier.
-        *   `const std::function<void()> work`: The callable entity representing the task's work. Stored by value, assumes tasks are lightweight enough to copy/move `std::function`.
-        *   `TaskState state`: The current lifecycle state. Initialized to `PENDING` or `READY`.
-        *   `const std::vector<TaskID> dependencies`: A list of `TaskID`s this task depends upon. Immutable after creation.
-        *   `std::atomic<std::size_t> unmet_dependency_count`: Initialized to `dependencies.size()`. Atomically decremented when a dependency completes. Task becomes `READY` when this reaches zero.
-        *   `std::mutex task_mutex_`: (Considered, but deferred for initial scope). A mutex specific to this task instance for fine-grained locking if needed in future extensions. The initial design relies on coarser locking in the `Scheduler`.
-    *   **`Scheduler::tasks_`**: `std::unordered_map<TaskID, std::shared_ptr<Task>>`. Stores all tasks managed by the scheduler, allowing O(1) average time lookup by `TaskID`. `std::shared_ptr` is used to manage the lifetime of `Task` objects, allowing them to be referenced from the map, the ready queue (implicitly), and potentially by dependent tasks without manual lifetime tracking.
-    *   **`Scheduler::ready_queue_`**: `std::deque<TaskID>`. A double-ended queue holding the `TaskID`s of tasks that are in the `READY` state. `std::deque` provides efficient push_back and pop_front operations.
+    *   **`Scheduler::tasks_`**: `std::unordered_map<TaskID, std::shared_ptr<Task>>`. Central repository for all submitted tasks, enabling O(1) average lookup. `std::shared_ptr` manages `Task` object lifetime.
+    *   **`Scheduler::readyTasks_`**: `std::deque<TaskID>`. FIFO queue holding IDs of tasks whose state is `READY`.
+    *   **`Scheduler::downwardDependencies_`**: `std::unordered_map<TaskID, std::vector<TaskID>>`. Stores the reverse dependency graph (TaskID -> list of tasks that depend on it) for efficient notification upon task completion/failure.
+    *   **`Scheduler::workers_`**: `std::vector<std::unique_ptr<Worker>>`. Owns the `Worker` logic objects. `std::unique_ptr` ensures automatic cleanup.
+    *   **`Scheduler::workerThreads_`**: `std::vector<std::thread>`. Holds the OS thread handles executing the `Worker::run` logic. Separates execution context from worker logic.
+    *   **`Task::dependencies_`**: `const std::vector<TaskID>`. Stores the IDs of prerequisite tasks. Immutable after `Task` creation.
+    *   **`Task::unmetCount_`**: `std::atomic<TaskID>`. Atomically tracks the number of outstanding dependencies for efficient readiness checks.
+    *   **`Task::state_`**: `t_TaskState` (enum). Current lifecycle state of the task.
 
 *   **3.3. Synchronization Primitives:**
-    *   **`Scheduler::queue_mutex_`**: `std::mutex`. Protects access to the `ready_queue_` and coordinates updates to `Task::state` when transitioning tasks between `PENDING`, `READY`, and `RUNNING`. This coarse-grained lock simplifies the initial implementation but may become a contention point under high load.
-    *   **`Scheduler::condition_`**: `std::condition_variable`. Used in conjunction with `queue_mutex_`. Worker threads wait on this condition variable when the `ready_queue_` is empty. It is notified when a new task becomes `READY` or when the scheduler is shutting down.
-    *   **`Scheduler::stop_requested_`**: `std::atomic<bool>`. A flag indicating that the scheduler is shutting down. Checked by worker threads to determine when to exit their loop. `std::atomic` ensures visibility and atomicity without requiring explicit locking for reads/writes to this flag.
-    *   **`Task::unmet_dependency_count`**: `std::atomic<std::size_t>`. Used to track remaining dependencies atomically, allowing multiple dependencies to complete concurrently without race conditions on the counter itself.
+    *   **`Scheduler::mtx_`**: `std::mutex`. Primary mutex protecting access to shared scheduler resources: `tasks_`, `readyTasks_`, `downwardDependencies_`, and coordinating state updates.
+    *   **`Scheduler::workAvailable_`**: `std::condition_variable`. Used by worker threads to wait efficiently (when `readyTasks_` is empty) for new tasks or the stop signal. Used with `mtx_`.
+    *   **`Scheduler::stopRequested_`**: `std::atomic<bool>`. Flag indicating a shutdown request, checked by workers.
+    *   **`Task::unmetCount_`**: `std::atomic<TaskID>`. Allows thread-safe decrements when dependencies complete.
+    *   **`types_defines.h::globalMutex`**: `std::mutex`. External mutex used by the `safe_print` utility.
 
 *   **3.4. Algorithms:**
-    *   **Task Addition (`Scheduler::add_task`)**:
-        1.  Acquire lock on `queue_mutex_` (to protect `tasks_` map and potentially `ready_queue_`).
-        2.  Generate a new unique `TaskID` (e.g., incrementing `next_task_id_`).
-        3.  Create a `Task` object, initializing `id`, `work`, `dependencies`.
-        4.  Initialize `unmet_dependency_count` to `dependencies.size()`.
-        5.  Initialize `state` to `PENDING`.
-        6.  Add the new `Task` (wrapped in `shared_ptr`) to the `tasks_` map.
-        7.  Iterate through the `dependencies` list: For each `dep_id`, retrieve the corresponding dependency `Task` object from `tasks_` and add the new task's `id` to its `dependents` list. Handle potential invalid `dep_id` (e.g., throw exception or return error).
-        8.  If `unmet_dependency_count` is 0, change `state` to `READY` and push `id` onto `ready_queue_`.
-        9.  Release lock on `queue_mutex_`.
-        10. If a task was added to `ready_queue_`, notify one worker thread via `condition_.notify_one()`.
-        11. Return the new `TaskID`.
-    *   **Worker Thread Loop (`Scheduler::worker_loop`)**:
-        1.  Loop indefinitely (`while (true)`).
-        2.  Acquire `std::unique_lock<std::mutex> lock(queue_mutex_)`.
-        3.  Wait on `condition_` while the `ready_queue_` is empty AND `stop_requested_` is false: `condition_.wait(lock, [this]{ return !ready_queue_.empty() || stop_requested_; });`.
-        4.  Check if stop was requested *after* waking up: `if (stop_requested_ && ready_queue_.empty()) { return; // Exit loop }`.
-        5.  Dequeue a `TaskID` from `ready_queue_`.
-        6.  Retrieve the corresponding `std::shared_ptr<Task> task_ptr` from `tasks_`.
-        7.  Set `task_ptr->state = TaskState::RUNNING`.
-        8.  Release the lock: `lock.unlock()`. (Release *before* executing potentially long-running task work).
-        9.  Execute the task's work function:
-            ```cpp
-            try {
-                task_ptr->work();
-                // Task completed successfully
-                // Re-acquire lock to update state and notify dependents
-                lock.lock(); // Re-acquire the same lock
-                task_ptr->state = TaskState::COMPLETED;
-                notify_dependents(task_ptr->id); // Pass completed ID
-            } catch (const std::exception& e) {
-                // Handle task execution failure
-                // Log error: std::cerr << "Task " << task_ptr->id << " failed: " << e.what() << std::endl;
-                lock.lock(); // Re-acquire the same lock
-                task_ptr->state = TaskState::FAILED;
-                // Optionally: Propagate failure state to dependents? (Outside initial scope)
-            } catch (...) {
-                // Handle non-standard exceptions
-                // Log error: std::cerr << "Task " << task_ptr->id << " failed with unknown exception." << std::endl;
-                lock.lock(); // Re-acquire the same lock
-                task_ptr->state = TaskState::FAILED;
-            }
-            ```
-        10. The lock is implicitly released when `lock` goes out of scope at the end of the loop iteration (or explicitly if needed before looping).
-    *   **Dependency Notification (`Scheduler::notify_dependents`, called with `queue_mutex_` held)**:
-        1.  Retrieve the completed task (`completed_task_ptr`) from `tasks_` using `completed_task_id`.
-        2.  Iterate through the `dependents` list of `completed_task_ptr`.
-        3.  For each `dependent_id`:
-            a.  Retrieve the `dependent_task_ptr` from `tasks_`.
-            b.  Atomically decrement `dependent_task_ptr->unmet_dependency_count`.
-            c.  If the count becomes 0:
-                i.  Assert `dependent_task_ptr->state == TaskState::PENDING`.
-                ii. Set `dependent_task_ptr->state = TaskState::READY`.
-                iii. Push `dependent_id` onto `ready_queue_`.
-                iv. Notify one waiting worker thread: `condition_.notify_one()`.
-    *   **Scheduler Shutdown (`Scheduler::stop`)**:
-        1.  Set `stop_requested_ = true`.
-        2.  Notify all waiting worker threads: `condition_.notify_all()`.
-        3.  Join all threads in `worker_threads_`. Ensure this happens reliably (e.g., in the destructor using RAII).
+    *   **Task Addition (`Scheduler::addTask(func, deps)`):**
+        1.  Acquire `lock_guard` on `mtx_`.
+        2.  Validate existence of all `dependencies` in `tasks_`. Return error code (-2) if invalid.
+        3.  *Placeholder:* Perform cycle detection (currently a stub `check_cycles` returning false). Return error code (-3) if cycle detected.
+        4.  Generate unique `currentId` using atomic `id_.fetch_add(1)`.
+        5.  Create `Task` object via `new` and wrap in `std::shared_ptr`. Handle potential allocation failure (return -1).
+        6.  `emplace` the new task into `tasks_`.
+        7.  Iterate `dependencies`: Update `downwardDependencies_` map (`map[dep].push_back(currentId)`). Check state of `dep` in `tasks_`: if `COMPLETED`, decrement `unmetCount_` for `currentId`; if `FAILED`, set `currentId` state directly to `FAILED`.
+        8.  Check final `unmetCount_` for `currentId`. If 0, set state to `READY`, push `currentId` to `readyTasks_`, and `notify_one` on `workAvailable_`. Otherwise, ensure state is `PENDING`.
+        9.  Release lock (automatic). Return `currentId`.
+    *   **Worker Execution Loop (`Worker::run`):**
+        1.  Enter infinite `while(true)` loop.
+        2.  Acquire `std::unique_lock` on `scheduler_.mtx_`.
+        3.  Wait on `scheduler_.workAvailable_` using a predicate lambda checking `!scheduler_.readyTasks_.empty() || scheduler_.stopRequested_.load()`. Capture `stopReq` flag state within predicate.
+        4.  Check `stopReq` flag *after* wait returns. If true, unlock and `break` loop (Policy 2 shutdown).
+        5.  Dequeue `currTaskID` from `scheduler_.readyTasks_`.
+        6.  Lookup `task_ptr` (`shared_ptr<Task>`) in `scheduler_.tasks_` using `find()`. Handle "not found" error (unlock, log, `continue`).
+        7.  Set `task_ptr->setState(RUNNING)`.
+        9.  Unlock `lck`.
+        10. Execute `task_ptr->run()` within a `try/catch(...)` block, tracking success/failure.
+        11. Re-acquire lock (`lck.lock()`).
+        12. Set final task state (`COMPLETED` or `FAILED`) via `task_ptr->setState()`.
+        13. Call `scheduler_.notifyDependents(currTaskID)` (requires lock).
+        14. Unlock `lck`.
+    *   **Dependency Notification (`Scheduler::notifyDependents` - Private):**
+        1.  *Requires caller (Worker::run) to hold the lock on `mtx_`.*
+        2.  Find originating `taskId` in `tasks_`. Handle "not found".
+        3.  Check originating task's state (`FAILED` or `COMPLETED`).
+        4.  If `FAILED`: Iterate through `downwardDependencies_` for `taskId`. For each dependent, set state to `FAILED` and recursively call `notifyDependents`. *Note: Recursive call risks stack overflow; iterative queue/stack approach is safer.*
+        5.  If `COMPLETED`: Iterate through `downwardDependencies_`. For each dependent: Find it in `tasks_`. If `PENDING`, call `task->decrement_unmet_dependencies()`. If count reaches zero, set state to `READY`, push ID to `readyTasks_`, and `notify_one` on `workAvailable_`. Handle/log cases where dependent is not `PENDING`.
+    *   **Scheduler Start (`Scheduler::start`):**
+        1.  Reserve space in `workerThreads_`.
+        2.  Loop `0` to `threadNumber_ - 1`.
+        3.  `emplace_back` a new `std::thread` targeting `&Scheduler::Worker::run` on the corresponding `workers_[i].get()` pointer. Handle potential thread creation exceptions.
+    *   **Scheduler Shutdown (`Scheduler::stop`):**
+        1.  Acquire `std::unique_lock` on `mtx_`.
+        2.  Set `stopRequested_ = true`.
+        3.  Iterate `readyTasks_`, marking corresponding tasks in `tasks_` as `CANCELLED` (or `FAILED`).
+        4.  `readyTasks_.clear()`.
+        5.  `workAvailable_.notify_all()`.
+        6.  Unlock `lck`.
+        7.  Iterate `workerThreads_`. For each joinable thread, call `thread.join()`. *Remove `threadBusy_` check.*
 
-## 4. Implementation Details
+**4. Implementation Details**
 
 *   **Language Standard:** C++11.
-*   **Compiler:** Conforming C++11 compiler (e.g., GCC 4.8+, Clang 3.3+, MSVC 2015+).
-*   **Dependencies:** Standard C++ Library only.
-*   **Key C++11 Features Utilized:** `std::thread`, `std::mutex`, `std::condition_variable`, `std::atomic`, `std::function`, `std::shared_ptr`, `std::unique_lock`, `std::move`, lambdas, `enum class`, `auto`, range-based `for`, `<chrono>` for potential sleeps.
-*   **RAII:** The `Scheduler` destructor must implement Resource Acquisition Is Initialization to ensure `stop()` is called and threads are joined, preventing resource leaks and program termination issues. Consider a helper class for managing the `std::vector<std::thread>` lifecycle.
-*   **Exception Safety:** The `worker_loop` must catch exceptions originating from task execution to prevent thread termination. Task state should be updated to `FAILED`. Mutexes must be correctly unlocked during stack unwinding (`std::unique_lock` and `std::lock_guard` facilitate this).
+*   **Compiler:** Conforming C++11 compiler required.
+*   **Dependencies:** Standard C++ Library. External headers: `types_defines.h`, `task.h`, `scheduler.h`.
+*   **Key C++11 Features:** `std::thread`, `std::mutex`, `std::condition_variable`, `std::atomic`, `std::function`, `std::unique_ptr`, `std::shared_ptr`, `std::unordered_map`, `std::deque`, lambdas, `nullptr`, range-based for loops, `noexcept`, `<chrono>`.
+*   **RAII:** `Scheduler` destructor calls `stop()` ensuring thread joining. `unique_ptr` and `shared_ptr` manage memory. `lock_guard`/`unique_lock` manage mutexes.
+*   **Exception Safety:** Task execution failures are caught in `Worker::run`, task state set to `FAILED`. Thread creation errors handled in `start`. Basic robustness provided.
+*   **Logging:** Basic thread-unsafe `std::cout` used. A thread-safe logger (`safe_print` using `globalMutex`) is provided but needs consistent use.
 
-## 5. Evaluation and Testing
+**5. Evaluation and Testing**
 
-*   **5.1. Correctness Criteria:**
-    *   All tasks added to the scheduler eventually reach a terminal state (`COMPLETED` or `FAILED`), assuming no cyclic dependencies prevent readiness.
-    *   Dependency constraints are strictly enforced: A task never enters the `RUNNING` state before all its dependencies are in the `COMPLETED` state.
-    *   Tasks without dependencies become `READY` immediately upon addition.
-    *   The scheduler shuts down cleanly, joining all worker threads.
-*   **5.2. Showcase Scenario (Verification):**
-    *   Implement the scenario described in the previous specification (Tasks A, B, C, D, E with dependencies A->C, {A, B}->D, C->E).
-    *   Utilize thread-safe logging (e.g., locking `std::cout` or using a dedicated logging queue) to record task start and finish times/events.
-    *   Run with N=1, N=2, N=4 threads.
-    *   Verify output logs manually or via script to confirm execution order respects dependencies and demonstrates concurrency (e.g., A and B running simultaneously when N >= 2).
-*   **5.3. Automated Testing Strategy (using e.g., Google Test):**
-    *   **Basic Tests:** `AddTask`, `StartStopEmpty`, `StartStopWithTasks`.
-    *   **Dependency Tests:**
-        *   `LinearDependency`: A->B->C. Verify sequential execution even with multiple threads.
-        *   `ForkDependency`: A->B, A->C. Verify B and C run concurrently after A (N>=2).
-        *   `JoinDependency`: A->C, B->C. Verify C runs only after both A and B complete.
-        *   `ComplexDAG`: Combine fork/join patterns.
-    *   **Concurrency Tests:** Add M independent tasks, run with N threads (N < M). Use atomic counters or promises/futures within tasks to verify all M complete. Measure approximate makespan (total time) and compare N=1 vs N>1.
-    *   **Exception Handling Test:** Add a task designed to throw an exception. Verify its state becomes `FAILED`, other tasks are unaffected, and the scheduler remains operational.
-    *   **Stress Test:** Add a large number of tasks with random dependencies (ensuring DAG structure). Run with multiple threads and verify completion and shutdown.
-*   **5.4. Performance Metrics (Informal):** While not a primary goal, observe approximate makespan in concurrency tests as an indicator of parallel execution benefit. Note potential bottlenecks (e.g., `queue_mutex_`).
+*   **Current State:** Basic testing via `main` scenarios verifies core functionality (concurrency, simple dependencies, failure propagation).
+*   **Needs:** Formal unit tests (e.g., Google Test) for `Task` state transitions, `Scheduler::addTask` logic (especially dependency/failure pre-resolution), `Scheduler::notifyDependents`, and `Worker` logic segments. Integration tests for complex dependency graphs and concurrency scenarios. Stress tests for stability.
+*   **Correctness Criteria:** Dependency enforcement, all tasks reach terminal state (in non-cyclic graphs), absence of data races (requires analysis/tools), graceful shutdown.
 
-## 6. Assumptions and Limitations
+**6. Assumptions and Limitations**
 
-*   Task dependencies form a DAG. Cyclic dependencies will result in tasks never becoming ready.
-*   Tasks are non-preemptive once started by a worker thread.
-*   The number of worker threads is fixed after calling `start()`.
-*   `std::function` overhead is acceptable; task work functions are assumed movable/copyable.
-*   Dynamic memory allocation (via `shared_ptr`, `unordered_map`, `deque`, `function`) is acceptable.
-*   Basic exception safety is provided, but sophisticated error recovery or propagation is not implemented.
+*   Task dependencies must form a DAG *(cycle detection planned)*.
+*   Tasks are non-preemptive.
+*   Fixed-size thread pool.
+*   Dynamic memory allocation (`new`, smart pointers, containers) is acceptable.
+*   Failure propagation is currently recursive, risking stack overflow on deep graphs.
+*   `Scheduler::addTask(Task&&)` overload has potential ID management issues.
+*   Reliance on external `safe_print` utility with global state (`globalMutex`, `verbosityPrinted`).
 
-## 7. Future Work
+**7. Future Work**
 
-*   Implement task priorities.
-*   Implement task cancellation.
-*   Allow tasks to return results (`std::future`/`std::promise`).
-*   Optimize for performance (finer-grained locking, work-stealing queues).
-*   Add cycle detection during task addition.
-*   Explore C++17/20/23 features (`std::jthread`, parallel algorithms, coroutines, `std::format`, `std::expected`).
-*   Adapt design for resource-constrained environments (static allocation, RTOS integration).
+*   **Core Functionality:**
+    *   Implement `Scheduler::wait()` method using counters and dedicated conditional variable.
+    *   Implement robust cycle detection (e.g., DFS-based) within `addTask`.
+    *   Implement iterative (queue/stack) failure propagation in `notifyDependents`.
+    *   Implement cooperative task cancellation (e.g., `Task::cancel_requested_` flag checked within task work).
+    *   Implement task priorities (requires changes to `readyTasks_` - e.g., `std::priority_queue` - and potentially worker fetching logic).
+    *   Allow tasks to return results (e.g., using `std::packaged_task` and `std::future`).
+*   **API & Usability:**
+    *   Implement variadic template `addTask` (or vector addition) for batch submission (requires careful handling of inter-dependencies within the batch and cycle detection).
+    *   Add methods to query task status (`getTaskState(TaskID)`).
+    *   Add methods to query task results (if implemented).
+    *   Reports states of all tasks at completion
+    *   Improve error reporting (return codes, exceptions).
+*   **Performance & Scalability:**
+    *   Investigate lock contention on `mtx_`. Explore finer-grained locking strategies (more complex).
+    *   Implement work-stealing queues for potentially better load balancing among workers (advanced).
+    *   Optimize data structures if needed.
+*   **Robustness & Refinement:**
+    *   Implement a proper thread-safe logging framework (replace `safe_print` and `std::cout`).
+    *   Remove global variables (`globalMutex`, `verbosityPrinted`) by passing logger instances.
+    *   Validate `Task` state transitions more formally (`Task::setState`).
+    *   Refine or remove `addTask(Task&&)` overload. (Or find a way to incorporate it)
+    *   Consider using C++14/17/20 features where appropriate (`make_unique`, `make_shared`, `jthread` for cancellation).
 
-## 8. Conclusion
+**8. Conclusion**
 
-This specification details a robust design for a concurrent, dependency-aware task scheduler implemented using C++11 standard features. The design prioritizes correctness and clear application of modern C++ concurrency techniques. Through careful implementation and rigorous testing based on the outlined scenarios, the resulting system will serve as a functional scheduler and a valuable demonstration of C++11 capabilities in concurrent programming.
+This document outlines a C++11 concurrent task scheduler featuring dependency management (including failure propagation) and execution via a fixed-size thread pool. The design utilizes standard C++11 features for concurrency, memory management, and task representation. The current implementation provides core functionality suitable for basic testing, with clearly identified areas for future enhancement in terms of robustness, features, and performance.
