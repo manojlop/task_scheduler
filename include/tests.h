@@ -2,9 +2,9 @@
 #define SCHEDULER_TESTS__
 
 
-#include "scheduler.h" // Your Scheduler header
-#include "task.h"      // Your Task header
-#include "types_defines.h" // Your types header
+#include "types_defines.h"
+#include "scheduler.h"
+#include "task.h"
 
 #include <iostream>
 #include <vector>
@@ -15,10 +15,6 @@
 #include <string>
 
 
-// Declare the mutex as extern to be able to use it globally
-extern std::mutex globalMutex;
-
-void safe_print(const std::string& msg);
 
 int sanity_test();
 int failure_test();

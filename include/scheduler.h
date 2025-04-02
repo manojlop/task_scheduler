@@ -13,6 +13,7 @@
 #include <thread>
 #include <iostream>
 #include <algorithm>
+#include <tests.h>
 
 class Scheduler{
   // Implementation of class Worker
@@ -40,6 +41,7 @@ class Scheduler{
     Worker& operator=(Worker&& rhs) = delete;
   };
 private:
+  static const char* taskStateName[];
 
   // Used to prevent locking the mutex for simple operations
   std::atomic<TaskID> id_;
@@ -106,13 +108,13 @@ public:
 
   // Destructor
   ~Scheduler() { 
-    std::cout << "\n******************************************************************************\n";
-    std::cout << "Initiated Scheduler's destructor\n";
+    safe_print("******************************************************************************");
+    safe_print("Initiated Scheduler's destructor");
     // Stop all tasks
     stop();
     // Do i need to delete task pointers here? -> smart_ptr and unique_ptr handle this for us
-    std::cout << "\nScheduler stopped\n";
-    std::cout << "******************************************************************************\n";
+    safe_print("Scheduler stopped");
+    safe_print("******************************************************************************");
   }
 
   // Functions
