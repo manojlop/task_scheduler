@@ -29,6 +29,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib")
             -Wall
             -Wextra
             -pedantic
+            -pthread
         )
         
         # Define preprocessor macros for the library
@@ -54,6 +55,7 @@ target_compile_options(main PRIVATE
     -Wall               # Enable all warnings
     -Wextra             # Enable extra warnings
     -pedantic           # Ensure compliance with language standards
+    -pthread
     -O0
     -fno-elide-constructors
 )
@@ -88,6 +90,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
             -Wall
             -Wextra
             -pedantic
+            -pthread
         )
         
         # Define the same preprocessor macros for tests
@@ -129,6 +132,7 @@ if(Q AND NOT "${QUICK}" STREQUAL "")
             -Wall
             -Wextra
             -pedantic
+            -pthread
         )
 
         # Define preprocessor macros

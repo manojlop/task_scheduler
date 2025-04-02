@@ -72,7 +72,6 @@ private:
   /*
   Why having both workers_ and worker_threads_?
   - We separate the what(worker -> execution) from how (thread -> OS context)
-  - 
   */
 
   // Stores IDs of downward dependent tasks fo easier handling when task finishes work
@@ -84,6 +83,13 @@ private:
   // To inform workers that stop has been requested -> immediate stoppage of execution
   // std::condition_variable stop_requested_; // We don't need condition variable, as we don't have construct to wait -> kill
   std::atomic<bool> stopRequested_;
+
+  // Notify all dependents and put into readyTasks if all dependencies match
+  void notifyDependents(TaskID taskId);
+
+  // Checks weather the current addition creates a cycle (Currently it never should, because we can depend only on tasks already in the scheduler)
+  // Todo | TBD: Relax for already completed tasks?
+  bool check_cycles(TaskID dep, std::vector<TaskID>& cycle);
 
 public:
 
@@ -108,19 +114,25 @@ public:
 
   // Destructor
   ~Scheduler() { 
-    safe_print("******************************************************************************");
-    safe_print("Initiated Scheduler's destructor");
+    safe_print(("******************************************************************************"), "Scheduler", INFO);
+    safe_print(("Initiated Scheduler's destructor"), "Scheduler", INFO);
     // Stop all tasks
     stop();
     // Do i need to delete task pointers here? -> smart_ptr and unique_ptr handle this for us
-    safe_print("Scheduler stopped");
-    safe_print("******************************************************************************");
+    safe_print(("Scheduler stopped"), "Scheduler", INFO);
+    safe_print(("******************************************************************************"), "Scheduler", INFO);
   }
 
   // Functions
 
   // Adding tasks -> via function, returns TaskID
   // Cannot create dependencies with IDs that are not present yet
+  /*
+  Error codes are:
+  * -1 : Unable to create unique pointer
+  * -2 : Value from dependencies not present in the scheduler
+  * -3 : Dependency causes cycle to be made
+  */
   TaskID addTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
 
   // Moves task to scheduler
@@ -131,9 +143,6 @@ public:
   // Bool is to be able to check cycles in a graph on addition
   // template<typename T, typename... args>
   // std::vector<TaskID> addTask(T task, args... tasks);
-
-  // Notify all dependents and put into readyTasks if all dependencies match
-  void notifyDependents(TaskID taskId);
 
   // Creates worker threads and starts the scheduler -> TBD : should it start if no assigned tasks?
   void start();
