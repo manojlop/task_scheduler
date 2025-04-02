@@ -5,6 +5,6 @@
 
 using TaskID = std::size_t;
 
-enum t_TaskState { PENDING, READY, RUNNING, COMPLETED, FAILED };
+enum t_TaskState { PENDING, READY, RUNNING, COMPLETED, FAILED, CANCELLED };
 
 #endif
