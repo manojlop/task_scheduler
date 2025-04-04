@@ -6,6 +6,7 @@
       "command": "/usr/bin/g++",
       "args": [
         "-fdiagnostics-color=always",
+        "-D", "__TEST_FAILURE_PROPAGATED__",
         "-I${workspaceFolder}/include",
         "-g",
         "${workspaceFolder}/src/**.cpp",

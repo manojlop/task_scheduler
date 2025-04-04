@@ -110,6 +110,9 @@ int test_failure_propagated() {
   safe_print("Waiting for tasks to process(aprox 3 seconds)");
   std::this_thread::sleep_for(std::chrono::seconds(3));
 
+  scheduler.stop();
+  scheduler.printTaskCollection(INFO);
+
   safe_print("--- Scheduler Test Scenario End ---");
   return 0;
 }

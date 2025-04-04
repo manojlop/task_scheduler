@@ -20,5 +20,6 @@ bool Task::setState(t_TaskState st){
     safe_print(("Trying to change final state: " + std::to_string(this->state_) + " to a different state: " + std::to_string(st)), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
     return false;
   }
+  this->state_ = st;
   return true;
 }

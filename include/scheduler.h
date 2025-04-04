@@ -14,6 +14,7 @@
 #include <iostream>
 #include <algorithm>
 #include <tests.h>
+#include <stack>
 
 class Scheduler{
   // Implementation of class Worker
@@ -141,7 +142,7 @@ public:
   // std::vector<TaskID> addTask(T task, args... tasks);
 
   // Print out tasks and their states
-  void printTaskCollection(t_Verbosity verb);
+  void printTaskCollection(t_Verbosity verb = DEBUG);
 
   // Creates worker threads and starts the scheduler -> TBD : should it start if no assigned tasks?
   void start();

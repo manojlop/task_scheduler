@@ -29,15 +29,31 @@ void Scheduler::notifyDependents(TaskID taskId){
     // Don't decrement unmet count, iterate and mark failed
     // First need to check if there is entry to map
     if(downwardDependencies_.count(taskId)){
-      for(auto dependent_id : downwardDependencies_.at(taskId)){
-        auto dep_it = tasks_.find(dependent_id);
-        if(dep_it != tasks_.end()){
-          if(!dep_it->second->setStateFailed())
-            return;
-          // Todo : may induce stack overflow -> use outside queue/stack and no recursion for this
-          notifyDependents(dependent_id);
-        } else {
-          safe_print(("Task with id: " + std::to_string(dependent_id) + " couldn't be found in tasks map"), "Scheduler", ERROR);
+      std::stack<TaskID> stack;
+      stack.push(taskId);
+      while(!stack.empty()){
+        TaskID currFailed = stack.top();
+        stack.pop();
+        tasks_[currFailed]->setStateFailed();
+        if(downwardDependencies_.count(currFailed)){
+          for(auto dependent_id : downwardDependencies_.at(currFailed)){
+            auto dep_it = tasks_.find(dependent_id);
+            if(dep_it != tasks_.end()){
+              if(!dep_it->second->setStateFailed())
+                return;
+              // Todo : may induce stack overflow -> use outside queue/stack and no recursion for this
+              // notifyDependents(dependent_id);
+              stack.push(dep_it->first);
+            } else {
+              safe_print(("Task with id: " + std::to_string(dependent_id) + " couldn't be found in tasks map"), "Scheduler", ERROR);
+            }
+          }
+        }
+      }
+      if(!stack.empty()){
+        while(!stack.empty()){
+          TaskID currFailed = stack.top();
+          stack.pop();
         }
       }
     }
