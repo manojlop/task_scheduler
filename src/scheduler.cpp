@@ -14,7 +14,7 @@ bool Scheduler::check_cycles(TaskID dep, std::vector<TaskID>& cycle){
 
 
 void Scheduler::notifyDependents(TaskID taskId){
-  safe_print(("Task: " + std::to_string(taskId) + " is: " + taskStateName[tasks_[taskId]->state_] + " and it's notifying dependents"), "Scheduler", INFO);
+  safe_print(("Task: " + std::to_string(taskId) + " is: " + taskStateName[tasks_[taskId]->getState()] + " and it's notifying dependents"), "Scheduler", INFO);
 
   // Handle if wrong task id passed
   auto completed_task_it = tasks_.find(taskId);
@@ -24,7 +24,7 @@ void Scheduler::notifyDependents(TaskID taskId){
   }
   auto completed_task_ptr = tasks_[taskId];
 
-  if(completed_task_ptr->state_ == t_TaskState::FAILED){
+  if(completed_task_ptr->getState() == t_TaskState::FAILED){
     // Propagate failure
     // Don't decrement unmet count, iterate and mark failed
     // First need to check if there is entry to map
@@ -32,7 +32,8 @@ void Scheduler::notifyDependents(TaskID taskId){
       for(auto dependent_id : downwardDependencies_.at(taskId)){
         auto dep_it = tasks_.find(dependent_id);
         if(dep_it != tasks_.end()){
-          dep_it->second->state_ = t_TaskState::FAILED;
+          if(!dep_it->second->setStateFailed())
+            return;
           // Todo : may induce stack overflow -> use outside queue/stack and no recursion for this
           notifyDependents(dependent_id);
         } else {
@@ -61,15 +62,16 @@ void Scheduler::notifyDependents(TaskID taskId){
       auto dep_ptr = tasks_[dependent_id];
 
       // Proceed only if dependent is still pending
-      if(dep_ptr->state_ == t_TaskState::PENDING){
+      if(dep_ptr->getState() == t_TaskState::PENDING){
         // Returns true if zero
         if(dep_ptr->decrement_unmet_dependencies()){
-          dep_ptr->state_ = t_TaskState::READY;
+          if(!dep_ptr->setStateReady())
+            return;
           readyTasks_.push_back(dependent_id);
           workAvailable_.notify_one();
         }
-      } else if (dep_ptr->state_ == t_TaskState::RUNNING || dep_ptr->state_ == t_TaskState::READY){
-        safe_print(("Task with id: " + std::to_string(dep_ptr->id_) + " is already in state: " + taskStateName[dep_ptr->state_] + " but it depends on task: " + std::to_string(taskId) + " which has just COMPLETED"), "Scheduler", ERROR);
+      } else if (dep_ptr->getState() == t_TaskState::RUNNING || dep_ptr->getState() == t_TaskState::READY){
+        safe_print(("Task with id: " + std::to_string(dep_ptr->id_) + " is already in state: " + taskStateName[dep_ptr->getState()] + " but it depends on task: " + std::to_string(taskId) + " which has just COMPLETED"), "Scheduler", ERROR);
       }
     }
   }
@@ -120,26 +122,29 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
   for(auto dep : dependencies){
     downwardDependencies_[dep].push_back(currentId);
     // Decrement count if dependency is already completed
-    if(tasks_[dep]->state_ == t_TaskState::COMPLETED) {
+    if(tasks_[dep]->getState() == t_TaskState::COMPLETED) {
       safe_print(("Task: " + std::to_string(currentId) + "  depends on task: " + std::to_string(dep) + " which is already COMPLETED, so counter is decremented"), "Scheduler", INFO);
       tasks_[currentId]->decrement_unmet_dependencies();
     }
     // FAILURE is propagated
-    else if (tasks_[dep]->state_ == t_TaskState::FAILED) {
+    else if (tasks_[dep]->getState() == t_TaskState::FAILED) {
       safe_print(("Task: " + std::to_string(currentId) + "  depends on task: " + std::to_string(dep) + " which has FAILED, so its also FAILS"), "Scheduler", INFO);
-      tasks_[currentId]->state_ = t_TaskState::FAILED;
+      if(!tasks_[currentId]->setStateFailed())
+        return -10;
     }
   }
   if(tasks_[currentId]->unmetCount_.load() == 0){
-    // ptr->state_ = t_TaskState::READY; // We moved from ptr -> Segmentation fault!
+    // ptr->getState() = t_TaskState::READY; // We moved from ptr -> Segmentation fault!
     safe_print(("Task with id: " + std::to_string(currentId) + " doesn't have any more unmet dependencies, so it is READY"), "Scheduler", INFO);
-    tasks_[currentId]->state_ = t_TaskState::READY;
+    if(!tasks_[currentId]->setStateReady())
+      return -10;
     readyTasks_.push_back(currentId);
     workAvailable_.notify_one();
   } else {
      // Ensure initial state is PENDING if it wasn't set by default
-      if (tasks_[currentId]->state_  != t_TaskState::PENDING) {
-        tasks_[currentId]->state_ = t_TaskState::PENDING;
+      if (tasks_[currentId]->getState()  != t_TaskState::PENDING) {
+        if(!tasks_[currentId]->setStatePending())
+          return -10;
       }
       safe_print(("Task with id: " + std::to_string(currentId) + " is PENDING"), "Scheduler", INFO);
   }
@@ -147,39 +152,42 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
 }
 
 // Todo : revise if we want this -> potential problems with ids if we take outside ids. -> with moving const variables and creating new id (outside dependencies??)
-TaskID Scheduler::addTask(Task &&task){
-  std::lock_guard<std::mutex> lck(mtx_);
-  // Todo : validate dependencies
+// TaskID Scheduler::addTask(Task &&task){
+//   std::lock_guard<std::mutex> lck(mtx_);
+//   // Todo : validate dependencies
 
-  // Return current value and increment -> that is the one that is assigned
-  // atomic variable cannot be in make_pair
-  TaskID currentId = id_.fetch_add(1);
-  std::shared_ptr<Task> ptr(new Task(std::move(task)));
-  // Todo : check cyclical dependencies before inserting -> return -1 if cycle is created
-  tasks_.emplace(currentId, std::move(ptr));
-  for(auto dep : task.dependencies_){
-    // We map to the assigned ID, not the incremented one
-    downwardDependencies_[dep].push_back(currentId);
-    if(tasks_[dep]->state_ == t_TaskState::COMPLETED)
-      tasks_[currentId]->decrement_unmet_dependencies();
-    else if (tasks_[dep]->state_ == t_TaskState::FAILED)
-      tasks_[currentId]->state_ = t_TaskState::FAILED;
-  }
-  if(tasks_[currentId]->unmetCount_.load() == 0){
-    // ptr->state_ = t_TaskState::READY; // We moved from ptr -> segmentation fault!
-    tasks_[currentId]->state_ = t_TaskState::READY;
-    readyTasks_.push_back(currentId);
-    workAvailable_.notify_one();
-  } else {
-     // Ensure initial state is PENDING if it wasn't set by default
-     if (tasks_[currentId]->state_  == t_TaskState::READY) { // Check Task's default state logic
-        tasks_[currentId]->state_ = t_TaskState::PENDING;
-     }
-     // TODO: Add check if all dependencies already exist and are COMPLETED?
-     // (More advanced: handle adding task where deps are already done)
-  }
-  return currentId;
-}
+//   // Return current value and increment -> that is the one that is assigned
+//   // atomic variable cannot be in make_pair
+//   TaskID currentId = id_.fetch_add(1);
+//   std::shared_ptr<Task> ptr(new Task(std::move(task)));
+//   // Todo : check cyclical dependencies before inserting -> return -1 if cycle is created
+//   tasks_.emplace(currentId, std::move(ptr));
+//   for(auto dep : task.dependencies_){
+//     // We map to the assigned ID, not the incremented one
+//     downwardDependencies_[dep].push_back(currentId);
+//     if(tasks_[dep]->getState() == t_TaskState::COMPLETED)
+//       tasks_[currentId]->decrement_unmet_dependencies();
+//     else if (tasks_[dep]->getState() == t_TaskState::FAILED)
+//       if(!tasks_[currentId]->setStateFailed())
+//         return -10;
+//   }
+//   if(tasks_[currentId]->unmetCount_.load() == 0){
+//     // ptr->getState() = t_TaskState::READY; // We moved from ptr -> segmentation fault!
+//     if(!tasks_[currentId]->setStateReady())
+//       return -10;
+//     readyTasks_.push_back(currentId);
+//     workAvailable_.notify_one();
+//   } else {
+//      // Ensure initial state is PENDING if it wasn't set by default
+//      if (tasks_[currentId]->getState()  == t_TaskState::READY) { // Check Task's default state logic
+//         if(!tasks_[currentId]->setStatePending())
+//           return -10;
+//      }
+//      // TODO: Add check if all dependencies already exist and are COMPLETED?
+//      // (More advanced: handle adding task where deps are already done)
+//   }
+//   return currentId;
+// }
 
 
 void Scheduler::start(){
@@ -211,14 +219,15 @@ void Scheduler::stop(){
       continue;
     }
     safe_print(("Scheduler is being stopped, so task: " + std::to_string(taskId) + " which was READY is being CANCELLED"), "Scheduler", DEBUG);
-    tasks_[taskId]->state_ = t_TaskState::CANCELLED;
+    if(!tasks_[taskId]->setStateCancelled())
+      return;
   }
   this->readyTasks_.clear();
   this->workAvailable_.notify_all();
   lck.unlock();
   safe_print("Lock released to stop the scheduler", "Scheduler", DEBUG);
   // We must join all started threads
-  for(int i = 0; i < workerThreads_.size(); i++){
+  for(int i = 0; i < int(workerThreads_.size()); i++){
     auto& thread = workerThreads_[i];
     if (thread.joinable()) {
       // We wait for thread to finish its work
@@ -231,9 +240,9 @@ void Scheduler::stop(){
 }
 
 
-std::shared_ptr<Task> Scheduler::createTask(std::function<void()> func, const std::vector<TaskID> &dependencies){
-  return std::shared_ptr<Task>();
-}
+// std::shared_ptr<Task> Scheduler::createTask(std::function<void()> func, const std::vector<TaskID> &dependencies){
+//   return std::shared_ptr<Task>();
+// }
 
 
 void Scheduler::Worker::run(){
@@ -322,7 +331,7 @@ void Scheduler::printTaskCollection(t_Verbosity verb){
     std::string dependencies = "";
     for(TaskID it : task.second->dependencies_)
       dependencies += std::to_string(it) + " ";
-    std::string str = "Task: " + std::to_string(task.first) + " is " + taskStateName[task.second->state_] + " unmet count is : " + std::to_string(task.second->unmetCount_) + " and it depends on following tasks: " + dependencies;
+    std::string str = "Task: " + std::to_string(task.first) + " is " + taskStateName[task.second->getState()] + " unmet count is : " + std::to_string(task.second->unmetCount_) + " and it depends on following tasks: " + dependencies;
     safe_print(str, "Scheduler", verb);
   }
   safe_print("********************************************************************************************", "Scheduler", verb);

@@ -14,6 +14,8 @@ class Task{
   friend class Scheduler;
 
 private:
+  static const char* taskStateName[];
+
   /*
   Removed for two reasons:
     1. Task itselft shouldn't be tasked with naming its own id
@@ -106,10 +108,32 @@ public:
   }
 
   /*
-  
+  Sets the state of the function as has checks to validate changes of states
   */
-  void setState(t_TaskState st){
-    state_ = st;
+  bool setState(t_TaskState st);
+  
+  inline bool setStateRunning(){
+    return setState(t_TaskState::RUNNING);
+  }
+  
+  inline bool setStatePending(){
+    return setState(t_TaskState::PENDING);
+  }
+
+  inline bool setStateFailed(){
+    return setState(t_TaskState::FAILED);
+  }
+
+  inline bool setStateCompleted(){
+    return setState(t_TaskState::COMPLETED);
+  }
+
+  inline bool setStateCancelled(){
+    return setState(t_TaskState::CANCELLED);
+  }
+
+  inline bool setStateReady(){
+    return setState(t_TaskState::READY);
   }
 
   /*
@@ -129,6 +153,7 @@ public:
     else 
       return false;
   }
+
 
   // Operators
   Task& operator=(const Task&) = delete;

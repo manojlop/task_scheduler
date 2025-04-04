@@ -127,11 +127,12 @@ public:
   * -1 : Unable to create unique pointer
   * -2 : Value from dependencies not present in the scheduler
   * -3 : Dependency causes cycle to be made
+  * -10 : State change error
   */
   TaskID addTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
 
   // Moves task to scheduler
-  TaskID addTask(Task&& task);
+  // TaskID addTask(Task&& task);
 
   // Variadic template to be able to pass single task, or multiple tasks in a vector or some other structure
   // Handled with recursion
@@ -148,7 +149,7 @@ public:
   // Called before Scheduler ends its life, makes sure that all threads are properly stopped. TBD : When does scheduler end?
   void stop();
 
-  std::shared_ptr<Task> createTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
+  // std::shared_ptr<Task> createTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
 
   // Operators
   Scheduler& operator=(const Scheduler&) = delete;

@@ -51,6 +51,11 @@ The system comprises three main components:
 *   Containers: `std::unordered_map`, `std::deque`, `std::vector`
 *   Utilities: `<chrono>`, `<algorithm>`, move semantics
 
+## Testing
+
+Currently, all the tests are done manualy. We hardcode tasks we want to be execute, andwe observe the execution via prints.\
+Future plans are to add automatic testing (probably using *gtest*)
+
 ## Building
 
 The project requires a C++11 compliant compiler (e.g., GCC 4.8+, Clang 3.3+, MSVC 2015+).
