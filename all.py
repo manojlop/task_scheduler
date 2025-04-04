@@ -17,6 +17,9 @@ def main():
     parser.add_argument("-t", "--target", 
                         help="Target filename for compilation and execution", 
                         default=None)
+    parser.add_argument("-test", "--test",
+                        help="Add test case which to run. Run based on compile flags. Tests available: sanity, stress, concurrent_tasks, dependency_chain, failure_propagated",
+                        dest="test")
     parser.add_argument("-dbg", "--debug", 
                         help="Enable debug mode with debug flags", 
                         action="store_true")
@@ -48,6 +51,8 @@ def main():
         build_command.extend(["-t", args.target])
     if args.debug:
         build_command.append("-dbg")
+    if args.test:
+        build_command.extend(["-test", args.test])
     
     # Run the build script
     print(f"Running build script: {' '.join(build_command)}")

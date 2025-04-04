@@ -1,3 +1,5 @@
+#ifdef __TEST_STRESS__
+
 #include "tests.h"
 
 std::atomic<int> completed_task_counter {0};
@@ -64,6 +66,8 @@ int test_stress(){
 
   scheduler.printTaskCollection(INFO);
 
-  safe_print("\n--- Stress test End ---");
+  safe_print("--- Stress test End ---");
   return 0;
 }
+
+#endif

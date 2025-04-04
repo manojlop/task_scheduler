@@ -1,3 +1,5 @@
+#ifdef __TEST_CONCURRENT_TASKS__
+
 #include "tests.h"
 
 int test_concurrent_tasks(){
@@ -40,3 +42,5 @@ int test_concurrent_tasks(){
   safe_print("--- Concurrent test: End ---");
   return 0;
 }
+
+#endif

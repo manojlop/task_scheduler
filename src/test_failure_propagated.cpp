@@ -1,5 +1,6 @@
-#include "tests.h"
+#ifdef __TEST_FAILURE_PROPAGATED__
 
+#include "tests.h"
 
 int test_failure_propagated() {
   safe_print("--- Scheduler Test Scenario Start ---");
@@ -112,3 +113,5 @@ int test_failure_propagated() {
   safe_print("--- Scheduler Test Scenario End ---");
   return 0;
 }
+
+#endif

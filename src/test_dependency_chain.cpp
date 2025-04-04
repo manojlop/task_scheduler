@@ -1,3 +1,5 @@
+#ifdef __TEST_DEPENDENCY_CHAIN__
+
 #include "tests.h"
 
 int test_dependency_chain(){
@@ -51,3 +53,5 @@ int test_dependency_chain(){
   safe_print("\n--- Test dependency chain: End ---");
   return 0;
 }
+
+#endif

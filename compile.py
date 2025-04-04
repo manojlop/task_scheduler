@@ -17,6 +17,7 @@ def main():
                         action="append", dest="definitions")
     parser.add_argument("-q", "--quick", help="Enable quick compilation mode", action="store_true")
     parser.add_argument("-t", "--target", help="Target filename for quick compilation (used with -q)", default=None)
+    parser.add_argument("-test", "--test", help="Put which test to run, runs it based on compile flags. Tests available: sanity, stress, concurrent_tasks, dependency_chain,  failure_propagated", dest="test")
     parser.add_argument("-dbg", "--debug", help="Enable debug mode with debug flags", action="store_true")
     
     args = parser.parse_args()
@@ -40,6 +41,11 @@ def main():
     
     if args.debug:
         cmake_command.append("-DCMAKE_BUILD_TYPE=Debug")
+
+    if args.test:
+        # Add compile flag for test
+        test_str = "-D__TEST_" + args.test.upper() + "__"
+        cmake_command.append(f"-DCMAKE_CXX_FLAGS={test_str}")
     
     # Run CMake configuration
     run_command(cmake_command)
