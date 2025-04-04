@@ -272,7 +272,7 @@ void Scheduler::Worker::run(){
       continue;
     }
     task_ptr = it->second; // Get the shared_ptr
-    safe_print(("Is responsible for task: " + std::to_string(currTaskID) + " and it is COMPLETED"), ("Worker: " + std::to_string(this->id_)), INFO);
+    safe_print(("Is responsible for task: " + std::to_string(currTaskID)), ("Worker: " + std::to_string(this->id_)), INFO);
 
     if(task_ptr){
       task_ptr->setState(t_TaskState::RUNNING);
@@ -316,3 +316,14 @@ void Scheduler::Worker::run(){
   } 
 }
 
+void Scheduler::printTaskCollection(t_Verbosity verb){
+  safe_print("********************************************************************************************", "Scheduler", verb);
+  for(auto task : tasks_){
+    std::string dependencies = "";
+    for(TaskID it : task.second->dependencies_)
+      dependencies += std::to_string(it) + " ";
+    std::string str = "Task: " + std::to_string(task.first) + " is " + taskStateName[task.second->state_] + " unmet count is : " + std::to_string(task.second->unmetCount_) + " and it depends on following tasks: " + dependencies;
+    safe_print(str, "Scheduler", verb);
+  }
+  safe_print("********************************************************************************************", "Scheduler", verb);
+}

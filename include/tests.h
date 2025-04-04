@@ -16,7 +16,12 @@
 
 
 
-int sanity_test();
-int failure_test();
+int test_sanity();
+int test_failure_propagated();
+int test_concurrent_tasks();
+int test_dependency_chain();
+// Use an atomic counter to track completed tasks (approximate check)
+extern std::atomic<int> completed_task_counter;
+int test_stress();
 
 #endif

@@ -1,7 +1,7 @@
 #include "tests.h"
 
 
-int failure_test() {
+int test_failure_propagated() {
   safe_print("--- Scheduler Test Scenario Start ---");
 
   // 1. Create Scheduler instance (e.g., with 3 worker threads)

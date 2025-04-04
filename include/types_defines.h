@@ -16,7 +16,7 @@ extern std::mutex globalMutex;
 
 extern t_Verbosity verbosityPrinted;
 
-void safe_print(std::string&& msg, std::string name = "General", t_Verbosity verbosity = INFO);
+void safe_print(std::string msg, std::string name = "General", t_Verbosity verbosity = INFO);
 
 using TaskID = std::size_t;
 

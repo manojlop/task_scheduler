@@ -1,6 +1,6 @@
 #include "tests.h"
 
-int sanity_test() {
+int test_sanity() {
     std::cout << "--- Scheduler Test Scenario (No Failures) Start ---" << std::endl;
 
     // 1. Create Scheduler instance (e.g., with 3 worker threads)

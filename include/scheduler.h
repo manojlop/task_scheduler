@@ -139,6 +139,9 @@ public:
   // template<typename T, typename... args>
   // std::vector<TaskID> addTask(T task, args... tasks);
 
+  // Print out tasks and their states
+  void printTaskCollection(t_Verbosity verb);
+
   // Creates worker threads and starts the scheduler -> TBD : should it start if no assigned tasks?
   void start();
 
