@@ -41,7 +41,7 @@ The system comprises three main components:
 *   **Readiness:** A task transitions to `READY` when its `unmetCount_` reaches zero. Its ID is then pushed onto the `readyTasks_` queue.
 *   **Producer-Consumer:** The `Scheduler` (specifically `addTask` and `notifyDependents` logic) acts as the producer, adding `TaskID`s to `readyTasks_`. The `Worker` threads act as consumers, waiting on `workAvailable_` and dequeuing `TaskID`s when available.
 *   **Notification:** `workAvailable_.notify_one()` is called when a task becomes `READY`. `workAvailable_.notify_all()` is called during `stop()`.
-*   **Shutdown (Policy 2):** When `stop()` is called, `stopRequested_` is set, remaining tasks in `readyTasks_` are marked `CANCELLED`, and workers exit their loop immediately upon observing `stopRequested_`. `stop()` then joins all worker threads.
+*   **Shutdown:** When `stop()` is called, `stopRequested_` is set, remaining tasks in `readyTasks_` are marked `CANCELLED`, and workers exit their loop immediately upon observing `stopRequested_`. `stop()` then joins all worker threads.
 
 ### C++11 Features Used
 
@@ -53,8 +53,15 @@ The system comprises three main components:
 
 ## Testing
 
-Currently, all the tests are done manualy. We hardcode tasks we want to be execute, andwe observe the execution via prints.\
+Currently, all the tests are done manualy. We hardcode tasks we want to be execute, and we observe the execution via prints.\
 Future plans are to add automatic testing (probably using *gtest*)
+
+Currently available tests are:
+* test_sanity: Simple execution of few tasks
+* test_failure_propagation: Test to see if the failure is propagated as it should
+* test dependency_chain: More complex dependency chain
+* test_concurrent_tasks: More workers working in parallel
+* test_stress: A large number of tasks started at similar time
 
 ## Building
 
@@ -82,7 +89,7 @@ There are 3 (essentially 3 python scripts provided):
 
 *Their explanation will be provided later, when they are defined as completed. For now, to run main, you can use all.py*
 
-> To run a specified test case, script ./all.py can be used, with flag test set. Like this: `./all.py -test stress`
+> To run a specified test case, script ./all.py can be used, with flag test set. Like this: `./all.py -test stress`. You only need to put the name of test after the flag
 
 ## Usage
 
@@ -133,6 +140,7 @@ Refer to `main.cpp` (*failure_test* and *saniy_test*) for a concrete example sce
 *   **Performance & Scalability:**
     *   Profile and potentially optimize locking (finer-grained locks).
     *   Consider work-stealing queues.
+    *   Can tasks add more tasks
 *   **Robustness & Refinement:**
     *   Integrate a proper thread-safe logging library.
     *   Remove global state (`globalMutex`, etc.).
