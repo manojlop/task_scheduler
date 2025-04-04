@@ -77,6 +77,8 @@ There are 3 (essentially 3 python scripts provided):
 
 *Their explanation will be provided later, when they are defined as completed. For now, to run main, you can use all.py*
 
+> To run a specified test case, script ./all.py can be used, with flag test set. Like this: `./all.py -test stress`
+
 ## Usage
 
 1.  Include `scheduler.h`.
