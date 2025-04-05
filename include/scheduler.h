@@ -17,6 +17,10 @@
 #include <stack>
 
 class Scheduler{
+
+  enum t_SchedulerState {CREATED, STARTED, STOPPED};
+  enum t_StopWay {IMMEDIATE, WAIT_ALL_TO_END};
+
   // Implementation of class Worker
   class Worker{
   private:
@@ -41,8 +45,13 @@ class Scheduler{
     Worker& operator=(const Worker& rhs) = delete;
     Worker& operator=(Worker&& rhs) = delete;
   };
+
 private:
   static const char* taskStateName[];
+
+  // State of the scheduler -> if its CREATED it can be started, or can be stopped without any work
+  // If its STOPPED, it can be started without creating new threads
+  t_SchedulerState state_;
 
   // Used to prevent locking the mutex for simple operations
   std::atomic<TaskID> id_;
@@ -87,13 +96,22 @@ private:
 
   // Checks weather the current addition creates a cycle (Currently it never should, because we can depend only on tasks already in the scheduler)
   // Todo | TBD: Relax for already completed tasks?
-  bool check_cycles(TaskID dep, std::vector<TaskID>& cycle);
+  bool check_cycles(TaskID dependand, TaskID depends_on, std::vector<TaskID>& cycle);
+
+  /*
+  Counters used to track how many tasks are finished
+  */
+  std::atomic<int> addedTasks_;
+  std::atomic<int> completedTasks_;
+  std::atomic<int> failedTasks_;
+  std::atomic<int> cancelledTasks_;
+
+  std::condition_variable allTasksFinished_;
 
 public:
 
-
   // Constructors -> Private default constructor
-  Scheduler(int n = 2) : id_(1), workerId_(0), threadNumber_(n), stopRequested_(false) {
+  Scheduler(int n = 2) :  state_(CREATED), id_(1), workerId_(0), threadNumber_(n), stopRequested_(false), addedTasks_(0), completedTasks_(0), failedTasks_(0), cancelledTasks_(0) {
     // Initialize workers after the constructor's initialization list
     workers_.reserve(n);  // Reserve space for efficiency
     for (int i = 0; i < n; i++) {
@@ -148,9 +166,15 @@ public:
   void start();
 
   // Called before Scheduler ends its life, makes sure that all threads are properly stopped. TBD : When does scheduler end?
-  void stop();
+  void stop(t_StopWay wayToStop = t_StopWay::IMMEDIATE);
 
   // std::shared_ptr<Task> createTask(std::function<void()> func, const std::vector<TaskID>& dependencies = {});
+
+  /*
+  Function that waits for all added tasks to end in sceduler, without stopping the sceduler itself
+  */
+  bool waitTasksToEnd();
+
 
   // Operators
   Scheduler& operator=(const Scheduler&) = delete;

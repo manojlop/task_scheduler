@@ -7,8 +7,21 @@ const char* Scheduler::taskStateName[] =  { "PENDING", "READY", "RUNNING", "COMP
 // involving the new task at the time of addition.
 // Chosen detection method (e.g., DFS on simulated graph copy, or targeted reachability)
 // will need to be implemented here before committing changes to tasks_ and downwardDependencies_.
-bool Scheduler::check_cycles(TaskID dep, std::vector<TaskID>& cycle){
-  
+
+// Todo : This implementation can maybe be sped up with dynamic programming? (if 5 can't reach 7, neither can 3 throught 5...) May use more resources, but may be benefitiary when large number of threads, to reduce workload
+bool Scheduler::check_cycles(TaskID dependand, TaskID depends_on, std::vector<TaskID>& cycle){
+  // std::stack<TaskID> stack;
+  if((downwardDependencies_.count(dependand) == 0) || downwardDependencies_[dependand].empty()) {
+    cycle.pop_back();
+    return false;
+  }
+  for(int i = 0; i < int(downwardDependencies_[dependand].size()); i++){
+    cycle.push_back(downwardDependencies_[dependand][i]);
+    if(downwardDependencies_[dependand][i] == cycle[0]) {
+      return true;
+    } else if(check_cycles(downwardDependencies_[dependand][i], dependand, cycle))
+      return true;
+  }
   return false;
 }
 
@@ -34,26 +47,18 @@ void Scheduler::notifyDependents(TaskID taskId){
       while(!stack.empty()){
         TaskID currFailed = stack.top();
         stack.pop();
-        tasks_[currFailed]->setStateFailed();
+        if(!tasks_[currFailed]->setStateFailed())
+          return;
+        failedTasks_.fetch_add(1);
         if(downwardDependencies_.count(currFailed)){
           for(auto dependent_id : downwardDependencies_.at(currFailed)){
             auto dep_it = tasks_.find(dependent_id);
             if(dep_it != tasks_.end()){
-              if(!dep_it->second->setStateFailed())
-                return;
-              // Todo : may induce stack overflow -> use outside queue/stack and no recursion for this
-              // notifyDependents(dependent_id);
               stack.push(dep_it->first);
             } else {
               safe_print(("Task with id: " + std::to_string(dependent_id) + " couldn't be found in tasks map"), "Scheduler", ERROR);
             }
           }
-        }
-      }
-      if(!stack.empty()){
-        while(!stack.empty()){
-          TaskID currFailed = stack.top();
-          stack.pop();
         }
       }
     }
@@ -99,12 +104,14 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
   // Waiting for access to shared resources
   std::lock_guard<std::mutex> lck(mtx_);
   safe_print(("Adding new task, obtained mutex"), "Scheduler", DEBUG);
+  // We load current value of id, to check if adding would induce dependencies (it won't in backward dependencies, but to be consistent)
+  TaskID currentId = id_.load();
   // Check weather there is depndency in the arguments that is not already in tasks. We cannot depend on task that wasnt created
   // We need to do checking of cyclical dependencies here, because we don't want to insert them into the task map
   // Tbd : optimize, it probably isn't best to copy, but we need new entries in order to check cycles, rigt?
-  for(auto dep : dependencies){
-    if(tasks_.count(dep) == 0){
-      safe_print(("Tried to add dependency id: " + std::to_string(dep) + " which is not in already created tasks"), "Scheduler", ERROR);
+  for(auto depends_on : dependencies){
+    if(tasks_.count(depends_on) == 0){
+      safe_print(("Tried to add dependency for id: " + std::to_string(currentId) + " to " + std::to_string(depends_on) + " which is not in already created tasks"), "Scheduler", ERROR);
       return -2;
     }
     // Todo : check cyclical dependencies before inserting -> return -1 if cycle is created
@@ -113,23 +120,25 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
     // V1.0 -> Currently, there can not be a cycle when depending on already 
     // TBD : Should this be provided as public method also, so that 'user' can check for dependencies before trying to add new task?
     std::vector<TaskID> cycle;
-    if(this->check_cycles(dep, cycle) == true) {
+    cycle.push_back(depends_on);
+    cycle.push_back(currentId);
+    if(this->check_cycles(currentId, depends_on, cycle) == true) {
       std::string cyc = "";
       for(auto id : cycle)
         cyc = cyc + ", " + std::to_string(id);
-      safe_print(("Cycle detected when inserting new dependency: " + std::to_string(dep) + " cycle: " + cyc), "Scheduler", ERROR);
+      safe_print(("Cycle detected when inserting new dependency: " + std::to_string(depends_on) + " cycle: " + cyc), "Scheduler", ERROR);
       return -2;
     }
   }
   // If we come to here, there are no dependencies
-  // Store current task id and increment by one for following task
-  TaskID currentId = id_.fetch_add(1);
+  id_++;
   safe_print(("New task id: " + std::to_string(currentId)), "Scheduler", INFO);
   try{
     // C++14 : std::make_shared() in C++14
     std::shared_ptr<Task> ptr(new Task(currentId, func, dependencies));
     // atomic variable cannot be in make_pair (for emplace) -> that is why we needed to store it in currentId
     tasks_.emplace(currentId, std::move(ptr));
+    addedTasks_.fetch_add(1);
   } catch (...) {
     safe_print("Unable to create unique pointer for thread", "Scheduler", ERROR);
     return -1;
@@ -207,54 +216,100 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
 
 
 void Scheduler::start(){
-  workerThreads_.reserve(workers_.size()); // Reserve space
-  for(size_t i = 0; i < workers_.size(); ++i){
-    // Launch thread and store it
-    // Pass pointer to the Worker object managed by unique_ptr
-    // Todo : try ... catch for OS errors
-    try {
-      workerThreads_.emplace_back(&Scheduler::Worker::run, workers_[i].get());
-    } catch (...) {
-      safe_print(("Unable to start thread: " + std::to_string(i)), "Scheduler", ERROR);
-      return;
+  if (state_ == t_SchedulerState::STARTED) {
+    safe_print("Scheduler already started", "Scheduler", WARNING);
+    return;
+  }
+  if(state_ == t_SchedulerState::CREATED) {
+    workerThreads_.reserve(workers_.size()); // Reserve space
+  }  else if (state_ == t_SchedulerState::STOPPED){
+    tasks_.clear();
+    downwardDependencies_.clear();
+    readyTasks_.clear();
+    addedTasks_.store(0);
+    completedTasks_.store(0);
+    failedTasks_.store(0);
+    cancelledTasks_.store(0);
+  }
+    for(size_t i = 0; i < workers_.size(); i++){
+      // Launch thread and store it
+      // Pass pointer to the Worker object managed by unique_ptr
+      // Todo : try ... catch for OS errors
+      try {
+        workerThreads_.emplace_back(&Scheduler::Worker::run, workers_[i].get());
+      } catch (...) {
+        safe_print(("Unable to start thread: " + std::to_string(i)), "Scheduler", ERROR);
+        return;
+      }
     }
+  state_ = STARTED;
+}
+
+void Scheduler::stop(t_StopWay wayToStop){
+  if(state_ != t_SchedulerState::STOPPED) {
+    if (wayToStop == t_StopWay::WAIT_ALL_TO_END) {
+      waitTasksToEnd();
+    }
+    // std::lock_guard<std::mutex> lck(mtx_); // We cannot use lock guard, because we need to unlock it in order to wait for threads to finish
+    std::unique_lock<std::mutex> lck(mtx_);
+    safe_print("Lock acquired to stop the scheduler", "Scheduler", DEBUG);
+    // Inform on stopage request
+    this->stopRequested_.store(true);
+    // Flush tasks that are in readyQueue -> TBD : Should we wait for them to complete
+    for(auto taskId : readyTasks_) {
+      auto it = tasks_.find(taskId);
+      if (it == tasks_.end()) {
+        safe_print(("Task with id: " + std::to_string(taskId) + " couldn't be found in tasks map"), "Scheduler", ERROR);
+        continue;
+      }
+      safe_print(("Scheduler is being stopped, so task: " + std::to_string(taskId) + " which was READY is being CANCELLED"), "Scheduler", DEBUG);
+      if(!tasks_[taskId]->setStateCancelled())
+        return;
+    }
+    this->readyTasks_.clear();
+    this->workAvailable_.notify_all();
+    lck.unlock();
+    safe_print("Lock released to stop the scheduler", "Scheduler", DEBUG);
+    // We must join all started threads
+    for(int i = 0; i < int(workerThreads_.size()); i++){
+      auto& thread = workerThreads_[i];
+      if (thread.joinable()) {
+        // We wait for thread to finish its work
+        safe_print(("Worker: " + std::to_string(i) + " is still busy, so we wait for it"), "Scheduler", NONE);
+        thread.join();
+        safe_print(("Worker: " + std::to_string(i) + " has finished work"), "Scheduler", NONE);
+      }
+    }
+    safe_print("End of stop in scheduler", "Scheduler", NONE);    
   }
 }
 
-void Scheduler::stop(){
-  // std::lock_guard<std::mutex> lck(mtx_); // We cannot use lock guard, because we need to unlock it in order to wait for threads to finish
-  std::unique_lock<std::mutex> lck(mtx_);
-  safe_print("Lock acquired to stop the scheduler", "Scheduler", DEBUG);
-  // Inform on stopage request
-  this->stopRequested_.store(true);
-  // Flush tasks that are in readyQueue -> TBD : Should we wait for them to complete
-  for(auto taskId : readyTasks_) {
-    auto it = tasks_.find(taskId);
-    if (it == tasks_.end()) {
-      safe_print(("Task with id: " + std::to_string(taskId) + " couldn't be found in tasks map"), "Scheduler", ERROR);
-      continue;
+bool Scheduler::waitTasksToEnd(){
+  if(state_ == t_SchedulerState::STARTED){
+    std::unique_lock<std::mutex> lck(mtx_);
+    safe_print("Waiting for all tasks to end", "Scheduler", INFO);
+    int totalTask = 0, complTask = 0, failTask = 0, cancTask = 0;
+    bool stopReq = false;
+    allTasksFinished_.wait(lck, [&] {
+      totalTask = addedTasks_.load();
+      complTask = completedTasks_.load();
+      failTask = failedTasks_.load();
+      cancTask = cancelledTasks_.load();
+      stopReq = stopRequested_.load();
+      return (((complTask + failTask + cancTask) == totalTask) || stopReq);
+    });
+    // If stop has been requested, stop the execution of thread
+    if(stopReq){
+      // Todo : implement end of life thread -> One thread to run to "cleanup" everything (or wait for all processes to finish?)
+      safe_print(("Stop was requested from scheduler"), ("Worker: " + std::to_string(this->id_)), NONE);
+      lck.unlock();
     }
-    safe_print(("Scheduler is being stopped, so task: " + std::to_string(taskId) + " which was READY is being CANCELLED"), "Scheduler", DEBUG);
-    if(!tasks_[taskId]->setStateCancelled())
-      return;
-  }
-  this->readyTasks_.clear();
-  this->workAvailable_.notify_all();
-  lck.unlock();
-  safe_print("Lock released to stop the scheduler", "Scheduler", DEBUG);
-  // We must join all started threads
-  for(int i = 0; i < int(workerThreads_.size()); i++){
-    auto& thread = workerThreads_[i];
-    if (thread.joinable()) {
-      // We wait for thread to finish its work
-      safe_print(("Worker: " + std::to_string(i) + " is still busy, so we wait for it"), "Scheduler", NONE);
-      thread.join();
-      safe_print(("Worker: " + std::to_string(i) + " has finished work"), "Scheduler", NONE);
-    }
-  }
-  safe_print("End of stop in scheduler", "Scheduler", NONE);
-}
 
+    safe_print(("All tasks currently present[" + std::to_string(totalTask) + "]finished. Completed[" + std::to_string(complTask) + "], Failed[" + std::to_string(failTask) + "], Cancelled[" + std::to_string(cancTask) + "]"), "Scheduler", INFO);
+  }
+
+  return false;
+}
 
 // std::shared_ptr<Task> Scheduler::createTask(std::function<void()> func, const std::vector<TaskID> &dependencies){
 //   return std::shared_ptr<Task>();
@@ -324,6 +379,7 @@ void Scheduler::Worker::run(){
     if(succesfullTask) {
       safe_print(("Has processed task: " + std::to_string(currTaskID) + " and it is COMPLETED"), ("Worker: " + std::to_string(this->id_)), INFO);
       task_ptr->setState(t_TaskState::COMPLETED);
+      scheduler_.completedTasks_.fetch_add(1);
     } else { 
       safe_print(("Has processed task: " + std::to_string(currTaskID) + " and it is FAILED"), ("Worker: " + std::to_string(this->id_)), INFO);
       task_ptr->setState(t_TaskState::FAILED);
@@ -333,6 +389,9 @@ void Scheduler::Worker::run(){
     // TBD : Is there some way to strictly execute that task next? Can there be a race condition that someone tries to take lock?
     // Can we delete lock from the function and keep it locked here?
     scheduler_.notifyDependents(currTaskID);
+    if((scheduler_.failedTasks_.load() + scheduler_.completedTasks_.load() + scheduler_.cancelledTasks_.load()) == scheduler_.addedTasks_.load()){
+      scheduler_.allTasksFinished_.notify_one();
+    }
     lck.unlock();
     safe_print( "Released end of task lock", ("Worker: " + std::to_string(this->id_)), DEBUG);
 

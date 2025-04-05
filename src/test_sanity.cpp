@@ -103,15 +103,17 @@ int test_sanity() {
     // Longest path: T1/T2 -> T4 -> T5
     // Rough estimate: max(T1, T2) + T4 + T5 = max(100, 140) + 120 + 60 = 140 + 120 + 60 = 320ms
     // Add some buffer for scheduling overhead, context switching etc. Let's wait 1 second.
-    long long estimated_completion_ms = 5000; // 1 second
-    std::cout << "\nWaiting for tasks to likely complete (approx " << estimated_completion_ms << " ms)..." << std::endl;
-    // std::cout << "(This is not a robust wait mechanism without scheduler.wait())" << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(estimated_completion_ms));
+    // long long estimated_completion_ms = 5000; // 1 second
+    // std::cout << "\nWaiting for tasks to likely complete (approx " << estimated_completion_ms << " ms)..." << std::endl;
+    // // std::cout << "(This is not a robust wait mechanism without scheduler.wait())" << std::endl;
+    // std::this_thread::sleep_for(std::chrono::milliseconds(estimated_completion_ms));
 
 
     // 5. Stop the scheduler -> Should never be done explicitly except in error case -> should be done either with wait or in destructor
     // std::cout << "\nRequesting scheduler stop..." << std::endl;
     // scheduler.stop(); // This will wait for running tasks to finish and join threads
+
+    scheduler.waitTasksToEnd();
 
 
     // std::cout << "\n--- Scheduler Test Scenario (No Failures) End ---" << std::endl;

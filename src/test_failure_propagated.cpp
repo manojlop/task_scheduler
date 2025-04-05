@@ -107,10 +107,11 @@ int test_failure_propagated() {
   // For a simple test, we just wait for a fixed duration.
   // A more robust solution would involve a scheduler.wait() method or
   // checking task statuses individually.
-  safe_print("Waiting for tasks to process(aprox 3 seconds)");
-  std::this_thread::sleep_for(std::chrono::seconds(3));
+//   safe_print("Waiting for tasks to process(aprox 3 seconds)");
+//   std::this_thread::sleep_for(std::chrono::seconds(3));
 
-  scheduler.stop();
+//   scheduler.stop();
+  scheduler.waitTasksToEnd();
   scheduler.printTaskCollection(INFO);
 
   safe_print("--- Scheduler Test Scenario End ---");
