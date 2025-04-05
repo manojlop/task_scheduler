@@ -56,6 +56,8 @@ The system comprises three main components:
 Currently, all the tests are done manualy. We hardcode tasks we want to be execute, and we observe the execution via prints.\
 Future plans are to add automatic testing (probably using *gtest*)
 
+### Manual testing
+
 Currently available tests are:
 * test_sanity: Simple execution of few tasks
 * test_failure_propagation: Test to see if the failure is propagated as it should
@@ -63,9 +65,155 @@ Currently available tests are:
 * test_concurrent_tasks: More workers working in parallel
 * test_stress: A large number of tasks started at similar time
 
+### Unit and integration testing
+
+#### Basics of GoogleTest
+
+For automating testing of our Scheduler, we will use [_Google Test_](https://google.github.io/googletest/) framework\
+These examples are taken from their primer for a quick understanding
+
+- **Basic Concepts**: When using GoogleTest, we start by writing _assertions_, which are statements that check weather a condition is true.\
+    Assertion's result can be _success_, _nonfatal failure_ or _fatal failure_. If a fatal failure occurs, it aborts the current function, otherwise the program continues normally\
+
+    _Tests_ use assertions to verify the tested code's behaviour. If a test crashes, or has a failed assertion, then it _fails_, otherwise it _succeeds_.
+
+    A *test_suite* contains one or many tests. Tests should be grouped into suites that reflect the structure of tested code. When multiple tests in a test suite need to share common objects and subroutines, they can be put into a _test fixture_ class
+
+    A *test_program* can contain multiple test suites
+- **Assertions**: We test a class or function by making assertions about its behavior.\
+    We have two types of assertions: `ASSERT_*` which generates fatal failure, and `EXPECT_*` which generates nonfatal failure
+
+    `ASSERT_*` returns from the current function immediately, possibly skipping clean-up code that comes after it, it may cause _space leak_ (_Heap checker error_ can be observed in addition to assertion errors). This leak may or may not be worth fixing itself.
+
+    ```cpp
+    ASSERT_EQ(x.size(), y.size()) << "Vectors x and y are of unequal length";
+
+    for (int i = 0; i < x.size(); ++i) {
+        EXPECT_EQ(x[i], y[i]) << "Vectors x and y differ at index " << i;
+    }
+    ```
+
+    Anything that can be streamed to `ostream`, can be streamed to assertion macro (<<)
+- **Testing**: Basic test suite can look like:
+    ```cpp
+    int Factorial(int n);  // Returns the factorial of n
+
+    // Tests factorial of 0.
+    TEST(FactorialTest, HandlesZeroInput) {
+    EXPECT_EQ(Factorial(0), 1);
+    }
+
+    // Tests factorial of positive numbers.
+    TEST(FactorialTest, HandlesPositiveInput) {
+    EXPECT_EQ(Factorial(1), 1);
+    EXPECT_EQ(Factorial(2), 2);
+    EXPECT_EQ(Factorial(3), 6);
+    EXPECT_EQ(Factorial(8), 40320);
+    }
+    ```
+
+
+#### How we use it to test Scheduler
+
+- **1. Setup GoogleTest**:
+    We need to integrate GoogleTest into our build system. For this, we will use CMake, using `FetchContent`\
+    We need C++14 for this, so we update c++ standard to 14
+
+    Add following code to you CMakeLists
+    ```
+    # GoogleTest requires at least C++14
+    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    ```
+
+    With GoogleTest declared as dependency, we can use it within our own project (`hello_test.cc`)
+    ```cpp
+    #include <gtest/gtest.h>
+
+    // Demonstrate some basic assertions.
+    TEST(HelloTest, BasicAssertions) {
+    // Expect two strings not to be equal.
+    EXPECT_STRNE("hello", "world");
+    // Expect equality.
+    EXPECT_EQ(7 * 6, 42);
+    }
+    ```
+
+    To build the code, add following to end of our CMakeLists.\
+    It enables testing in CMake, declares C++ test binary we want to build (hello_test) and links googleTest(gtest_main)
+    ```cmake
+    enable_testing()
+
+    add_executable(
+    hello_test
+    hello_test.cc
+    )
+    target_link_libraries(
+    hello_test
+    GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(hello_test)
+    ```
+
+    Now we can build and run our tests:
+    ```bash
+    {my_dir}$ cmake -S . -B build
+    -- The C compiler identification is GNU 10.2.1
+    -- The CXX compiler identification is GNU 10.2.1
+    ...
+    -- Build files have been written to: .../{my_dir}/build
+
+    {my_dir}$ cmake --build build
+    Scanning dependencies of target gtest
+    ...
+    [100%] Built target gmock_main
+
+    {my_dir}$ cd build && ctest
+    Test project .../{my_dir}/build
+        Start 1: HelloTest.BasicAssertions
+    1/1 Test #1: HelloTest.BasicAssertions ........   Passed    0.00 sec
+
+    100% tests passed, 0 tests failed out of 1
+
+    Total Test time (real) =   0.01 sec
+    ```
+
+- **2.Creating tests and integrating into our project**
+
+    Specific executables to add:
+    ```cmake
+    # Enable testing
+    enable_testing()
+
+    # Link your scheduler library (assuming we create one)
+    # add_library(scheduler src/scheduler.cpp src/task.cpp ...)
+
+    # Create the test executable
+    add_executable(scheduler_tests tests/main_test.cpp tests/task_test.cpp tests/scheduler_unit_test.cpp tests/scheduler_integration_test.cpp) 
+
+    # Link scheduler library and gtest
+    target_link_libraries(scheduler_tests PRIVATE scheduler gtest_main) # gtest_main provides main()
+
+    # Add test to CTest
+    include(GoogleTest)
+    gtest_discover_tests(scheduler_tests)
+    ```
+
 ## Building
 
 The project requires a C++11 compliant compiler (e.g., GCC 4.8+, Clang 3.3+, MSVC 2015+).
+**GoogleTest** We need C++14 for GoogleTest integration
 
 **Using CMake (Recommended):**
 
