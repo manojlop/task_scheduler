@@ -17,7 +17,7 @@ bool Task::setState(t_TaskState st){
     return false;
   }
   if(((this->state_ == t_TaskState::FAILED) || (this->state_ == t_TaskState::CANCELLED) || (this->state_ == t_TaskState::COMPLETED)) && (st != this->state_)){
-    safe_print(("Trying to change final state: " + std::to_string(this->state_) + " to a different state: " + std::to_string(st)), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
+    safe_print(("Trying to change final state: " + std::string(taskStateName[this->state_]) + " to a different state: " + std::string(taskStateName[st])), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
     return false;
   }
   this->state_ = st;

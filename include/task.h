@@ -73,6 +73,12 @@ private:
 
   std::string description_;
 
+
+  /*
+  Sets the state of the function as has checks to validate changes of states
+  */
+  bool setState(t_TaskState st);
+
 public:
 
   // Constructors
@@ -107,11 +113,6 @@ public:
   t_TaskState getState() const {
     return state_;
   }
-
-  /*
-  Sets the state of the function as has checks to validate changes of states
-  */
-  bool setState(t_TaskState st);
   
   inline bool setStateRunning(){
     return setState(t_TaskState::RUNNING);
