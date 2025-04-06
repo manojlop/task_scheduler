@@ -23,6 +23,12 @@ def main():
     parser.add_argument("-dbg", "--debug", 
                         help="Enable debug mode with debug flags", 
                         action="store_true")
+    parser.add_argument("-gt", "--googletest",
+                        help="Start googleTest tests",
+                        action="store_true")
+    parser.add_argument("-c", "--clean",
+                        help="Clean the build directory first",
+                        action="store_true")
     
     # Get the directory of the current script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,11 +36,12 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    clean_script = os.path.join(script_dir, "clean.py")
-    clean_command = [sys.executable, clean_script]
+    if args.clean:
+        clean_script = os.path.join(script_dir, "clean.py")
+        clean_command = [sys.executable, clean_script]
 
-    print(f"Running clean script: {' '.join(clean_command)}")
-    build_result = subprocess.run(clean_command)
+        print(f"Running clean script: {' '.join(clean_command)}")
+        build_result = subprocess.run(clean_command)
     
     # Construct command for the build script
     build_script = os.path.join(script_dir, "compile.py")
@@ -71,6 +78,8 @@ def main():
         run_command.append("-q")
     if args.target:
         run_command.extend(["-t", args.target])
+    if args.googletest:
+        run_command.append("-gt")
     
     # Run the run script
     print(f"Running run script: {' '.join(run_command)}")

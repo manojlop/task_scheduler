@@ -30,7 +30,7 @@ def main():
     if args.definitions:
         # Join all definitions with proper formatting
         definitions_str = " ".join([f"-D{definition}" for definition in args.definitions])
-        cmake_command.append(f"-DCMAKE_CXX_FLAGS={definitions_str}")
+        cmake_command.append(f"-DEXTRA_FLAGS={definitions_str}")
     
     if args.quick:
         if not args.target:

@@ -8,6 +8,8 @@
         "-fdiagnostics-color=always",
         "-D", "__TEST_FAILURE_PROPAGATED__",
         "-I${workspaceFolder}/include",
+        "-I${gtest_SOURCE_DIR}/googletest/include",
+        "-I${gtest_SOURCE_DIR}/googlemock/include",
         "-g",
         "${workspaceFolder}/src/**.cpp",
         "-o",

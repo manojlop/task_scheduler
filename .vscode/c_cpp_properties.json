@@ -1,0 +1,16 @@
+{
+  "configurations": [
+      {
+          "name": "Linux", // Or your platform
+          "compilerPath": "/usr/bin/gcc", // Or clang, MAKE SURE this matches your CMake kit!
+          "cStandard": "c11", // Or your standard
+          "cppStandard": "c++14", // Match your CMakeLists.txt
+          "intelliSenseMode": "linux-gcc-x64", // Or clang-x64, match compiler
+          // ---->>>> CRITICAL LINE <<<<----
+          "configurationProvider": "ms-vscode.cmake-tools"
+          // ---->>>> CRITICAL LINE <<<<----
+      }
+      // You might have other configurations like Mac, Win32
+  ],
+  "version": 4
+}

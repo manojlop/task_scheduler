@@ -21,16 +21,13 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-set(DOWNLOAD_EXTRACT_TIMESTAMP True)
-
-
 # Set output directories for better organization
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # Find all .cpp files in the src directory
-file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS "src/*.cpp" "test/*.cpp")
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS "src/*.cpp")
 
 # Check if lib directory exists and has source files
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib")
@@ -54,6 +51,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         )
     endif()
 endif()
+
 
 # Add the executable with all source files
 add_executable(main ${SOURCE_FILES})
@@ -82,7 +80,7 @@ target_compile_definitions(main PRIVATE
 )
 
 # Apply the -save-temps flag globally as in your original file
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -save-temps -masm=intel")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -save-temps -masm=intel ${EXTRA_FLAGS}")
 
 # Add optimization level options
 # # Optimization Levels
@@ -95,11 +93,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -save-temps -masm=intel")
 
 # Add test support if test directory exists
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
-    file(GLOB_RECURSE TEST_SOURCE_FILES "test/*.cpp")
+    file(GLOB_RECURSE TEST_SOURCE_FILES CONFIGURE_DEPENDS "test/*.cpp")
     if(TEST_SOURCE_FILES)
         enable_testing()
-        add_executable(MyTests ${TEST_SOURCE_FILES})
-        target_include_directories(MyTests PRIVATE include)
+        add_executable(MyTests "src/scheduler.cpp" "src/task.cpp" "src/helpers.cpp" ${TEST_SOURCE_FILES} )
+        target_include_directories(MyTests PUBLIC include) 
+        target_include_directories(MyTests PRIVATE ${gtest_SOURCE_DIR}/googletest/include ${gtest_SOURCE_DIR}/googlemock/include)
         
         # Apply the same compile options to tests
         target_compile_options(MyTests PRIVATE 
@@ -108,6 +107,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
             -pedantic
             -pthread
         )
+
         
         # Define the same preprocessor macros for tests
         target_compile_definitions(MyTests PRIVATE 
@@ -115,13 +115,24 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
             TESTING
         )
         
+        # Link against gtest_main, gmock_main, and your project library if needed
+        target_link_libraries(MyTests
+        PRIVATE
+            gtest_main
+            gmock_main
+        )
+
         # Link with library if it exists
         if(TARGET MyLibrary)
             target_link_libraries(MyTests PRIVATE MyLibrary)
         endif()
+
+        # Add test to CTest
+        include(GoogleTest)
+        gtest_discover_tests(MyTests)
         
         # Add each test as a CTest test
-        add_test(NAME AllTests COMMAND MyTests)
+        # add_test(NAME AllTests COMMAND MyTests)
     endif()
 endif()
 
@@ -179,18 +190,3 @@ if(ENABLE_FEATURE)
     endif()
 endif()
 
-# Enable testing
-enable_testing()
-
-# Link your scheduler library (assuming we create one)
-# add_library(scheduler src/scheduler.cpp src/task.cpp ...)
-
-# Create the test executable
-add_executable(scheduler_tests test/gt_test_main.cpp test/gt_test_task.cpp test/gt_test_scheduler_unit.cpp test/gt_test_scheduler_integration.cpp) 
-
-# Link scheduler library and gtest
-target_link_libraries(scheduler_tests PRIVATE scheduler gtest_main) # gtest_main provides main()
-
-# Add test to CTest
-include(GoogleTest)
-gtest_discover_tests(scheduler_tests)

@@ -190,7 +190,6 @@ These examples are taken from their primer for a quick understanding
     ```
 
 - **2.Creating tests and integrating into our project**
-
     Specific executables to add:
     ```cmake
     # Enable testing
@@ -200,7 +199,7 @@ These examples are taken from their primer for a quick understanding
     # add_library(scheduler src/scheduler.cpp src/task.cpp ...)
 
     # Create the test executable
-    add_executable(scheduler_tests tests/main_test.cpp tests/task_test.cpp tests/scheduler_unit_test.cpp tests/scheduler_integration_test.cpp) 
+    add_executable(scheduler_tests test/gt_test_main.cpp test/gt_test_task.cpp test/gt_test_scheduler_unit.cpp test/gt_test_scheduler_integration.cpp) 
 
     # Link scheduler library and gtest
     target_link_libraries(scheduler_tests PRIVATE scheduler gtest_main) # gtest_main provides main()
@@ -209,6 +208,40 @@ These examples are taken from their primer for a quick understanding
     include(GoogleTest)
     gtest_discover_tests(scheduler_tests)
     ```
+
+- **3. Grant access to tests**
+    Unit tests need access to internals of a class. That is why we need to give friendship priviledges to test classes
+
+    ```cpp
+    class Scheduler {
+    // Make the specific test fixture class a friend
+        friend class SchedulerTest_AddTask_Test; // Naming convention: FixtureName_TestName_Test
+        friend class SchedulerTest_Notify_Test;  // Or just friend class SchedulerTest; if using a fixture
+        friend class SchedulerIntegrationTest; // For integration tests needing hooks
+        // ***
+    }
+    ```
+
+    and we can potentially add test-only helpers (we guard them with compile flags so they don't make production)
+    ```cpp
+    // ***
+    #ifdef GTEST_TESTING_ENABLED // Use a build flag to exclude from production
+    const std::deque<TaskID>& getReadyQueueForTest() const { return readyTasks_; }
+    std::shared_ptr<Task> getTaskInternal(TaskID id) {
+        auto it = tasks_.find(id);
+        return (it != tasks_.end()) ? it->second : nullptr;
+    }
+    size_t getTaskCount() const { return tasks_.size(); }
+    #endif
+    // ***
+    ```
+
+- **4. Creating the tests**
+    Examples of the tests can be seen in following files:
+    * gt_test_main.cpp
+    * gt_test_task.cpp
+    * gt_test_scheduler_unit.cpp
+    * gt_test_scheduler_integration.cpp
 
 ## Building
 
