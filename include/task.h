@@ -12,6 +12,7 @@ class Scheduler;
 
 class Task{
   friend class Scheduler;
+  friend class TaskTest;
 
 private:
   static const char* taskStateName[];
@@ -79,7 +80,7 @@ public:
   Task() = delete;
 
   Task(int identifier = 0, std::function<void()> func = {}, const std::vector<TaskID>& dep = std::vector<TaskID>(), std::string descr = "") : id_(identifier), work_(func), dependencies_(dep), unmetCount_(dep.size()), description_(descr) {
-    state_ = dep.size() == 0 ? READY : PENDING;
+    state_ = unmetCount_.load() == 0 ? READY : PENDING;
   }
 
   // Copy constructor -> Tasks shouldn't be copyiable
