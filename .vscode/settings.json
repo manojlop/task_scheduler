@@ -67,7 +67,8 @@
     "map": "cpp",
     "set": "cpp",
     "unordered_set": "cpp",
-    "fstream": "cpp"
+    "fstream": "cpp",
+    "future": "cpp"
   },
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }
