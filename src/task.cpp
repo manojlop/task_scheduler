@@ -4,8 +4,8 @@ const char* Task::taskStateName[] =  { "PENDING", "READY", "RUNNING", "COMPLETED
 
 bool Task::setState(t_TaskState st){
   int unmetCount = unmetCount_.load();
-  if(this->state_ == PENDING && (unmetCount != 0 && (st == t_TaskState::READY || st == t_TaskState::RUNNING))){
-    safe_print(("Changing state from PENDING to " + std::string(taskStateName[st]) + " , but unmet count is: " + std::to_string(unmetCount)), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
+  if(this->state_ == t_TaskState::PENDING && (unmetCount != 0 && (st == t_TaskState::READY || st == t_TaskState::RUNNING))){
+    safe_print(("Changing state from PENDING to " + std::string(taskStateName[int(st)]) + " , but unmet count is: " + std::to_string(unmetCount)), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
     return false;
   }
   if(this->state_ == t_TaskState::RUNNING && st == t_TaskState::PENDING) {
@@ -17,7 +17,7 @@ bool Task::setState(t_TaskState st){
     return false;
   }
   if(((this->state_ == t_TaskState::FAILED) || (this->state_ == t_TaskState::CANCELLED) || (this->state_ == t_TaskState::COMPLETED)) && (st != this->state_)){
-    safe_print(("Trying to change final state: " + std::string(taskStateName[this->state_]) + " to a different state: " + std::string(taskStateName[st])), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
+    safe_print(("Trying to change final state: " + std::string(taskStateName[int(this->state_)]) + " to a different state: " + std::string(taskStateName[int(st)])), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
     return false;
   }
   this->state_ = st;

@@ -135,13 +135,13 @@ public:
 
   // Destructor
   ~Scheduler() { 
-    safe_print(("******************************************************************************"), "Scheduler", INFO);
-    safe_print(("Initiated Scheduler's destructor"), "Scheduler", INFO);
+    safe_print(("******************************************************************************"), "Scheduler", t_Verbosity::INFO);
+    safe_print(("Initiated Scheduler's destructor"), "Scheduler", t_Verbosity::INFO);
     // Stop all tasks
     stop();
     // Do i need to delete task pointers here? -> smart_ptr and unique_ptr handle this for us
-    safe_print(("Scheduler stopped"), "Scheduler", INFO);
-    safe_print(("******************************************************************************"), "Scheduler", INFO);
+    safe_print(("Scheduler stopped"), "Scheduler", t_Verbosity::INFO);
+    safe_print(("******************************************************************************"), "Scheduler", t_Verbosity::INFO);
   }
 
   // Functions
@@ -167,7 +167,7 @@ public:
   // std::vector<TaskID> addTask(T task, args... tasks);
 
   // Print out tasks and their states
-  void printTaskCollection(t_Verbosity verb = DEBUG);
+  void printTaskCollection(t_Verbosity verb = t_Verbosity::DEBUG);
 
   // Creates worker threads and starts the scheduler -> TBD : should it start if no assigned tasks?
   void start();

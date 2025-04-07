@@ -86,7 +86,7 @@ public:
   Task() = delete;
 
   Task(int identifier = 0, std::function<void()> func = {}, const std::vector<TaskID>& dep = std::vector<TaskID>(), std::string descr = "") : id_(identifier), work_(func), dependencies_(dep), unmetCount_(dep.size()), description_(descr) {
-    state_ = unmetCount_.load() == 0 ? READY : PENDING;
+    state_ = unmetCount_.load() == 0 ? t_TaskState::READY : t_TaskState::PENDING;
   }
 
   // Copy constructor -> Tasks shouldn't be copyiable
