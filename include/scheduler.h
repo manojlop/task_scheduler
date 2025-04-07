@@ -19,6 +19,7 @@
 class Scheduler{
 
   // We need to make specific tests be friends of Schedulers, so they can access its internals
+  friend class SchedulerTest;
   friend class SchedulerTest_AddTask_Test; // Naming convention: FixtureName_TestName_Test
   friend class SchedulerTest_Notify_Test;
   friend class SchedulerTest_CycleCheck_Test;

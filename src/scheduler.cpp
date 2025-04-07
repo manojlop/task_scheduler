@@ -301,7 +301,7 @@ bool Scheduler::waitTasksToEnd(){
     // If stop has been requested, stop the execution of thread
     if(stopReq){
       // Todo : implement end of life thread -> One thread to run to "cleanup" everything (or wait for all processes to finish?)
-      safe_print(("Stop was requested, aborting wait for tasks to finish"), "Scheduler"), NONE);
+      safe_print(("Stop was requested, aborting wait for tasks to finish"), "Scheduler", NONE);
       lck.unlock();
     }
 
