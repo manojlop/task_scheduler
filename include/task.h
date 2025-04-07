@@ -7,6 +7,7 @@
 #include <functional>
 #include <atomic>
 #include <string>
+#include <cassert>
 
 class Scheduler;
 
@@ -67,8 +68,10 @@ private:
     // Todo : check the state of function
     if(work_)
       work_();
-    // else 
-      // Todo : handle error when no work function
+    else {
+      safe_print(("Started run but there was no function provided"), ("Task: " + std::to_string(id_)), t_Verbosity::ERROR);
+      return;
+    }
   }
 
   std::string description_;
@@ -77,6 +80,7 @@ private:
   /*
   Sets the state of the function as has checks to validate changes of states
   */
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   bool setState(t_TaskState st);
 
 public:
@@ -114,26 +118,34 @@ public:
     return state_;
   }
   
+  // Todo : refactor code -> this is a security violation as anyone can attempt to change the state
+
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStateRunning(){
     return setState(t_TaskState::RUNNING);
   }
   
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStatePending(){
     return setState(t_TaskState::PENDING);
   }
 
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStateFailed(){
     return setState(t_TaskState::FAILED);
   }
 
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStateCompleted(){
     return setState(t_TaskState::COMPLETED);
   }
 
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStateCancelled(){
     return setState(t_TaskState::CANCELLED);
   }
 
+  // IMPORTANT: This method is not thread-safe and must only be called while holding the Scheduler's mutex.
   inline bool setStateReady(){
     return setState(t_TaskState::READY);
   }
@@ -142,13 +154,15 @@ public:
   Returning the value of an atomic requires specifying a memory order. std::memory_order_relaxed is often sufficient for just reading the value if you don't need synchronization guarantees with other variables based on this read
   */
   TaskID getUnmetCount() const {
-    return unmetCount_.load(std::memory_order_relaxed);
+    return unmetCount_.load();
   }
 
   /*
   Decrements and returns true if no remaining dependencies
   */
   bool decrement_unmet_dependencies(){
+    // It wouldwrap areound, potentially creating bugs later
+    assert(unmetCount_.load(std::memory_order_relaxed) > 0);
     unmetCount_.fetch_sub(1);
     if(unmetCount_.load() == 0)
       return true;

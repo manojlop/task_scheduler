@@ -13,7 +13,6 @@
 #include <thread>
 #include <iostream>
 #include <algorithm>
-#include <tests.h>
 #include <stack>
 
 class Scheduler{
@@ -99,6 +98,7 @@ private:
   std::atomic<bool> stopRequested_;
 
   // Notify all dependents and put into readyTasks if all dependencies match
+  // IMPORTANT: Assumes caller holds Scheduler::mtx_
   void notifyDependents(TaskID taskId);
 
   // Checks weather the current addition creates a cycle (Currently it never should, because we can depend only on tasks already in the scheduler)

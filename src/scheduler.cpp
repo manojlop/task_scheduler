@@ -22,10 +22,11 @@ bool Scheduler::check_cycles(TaskID dependand, TaskID depends_on, std::vector<Ta
     } else if(check_cycles(downwardDependencies_[dependand][i], dependand, cycle))
       return true;
   }
+  cycle.pop_back();
   return false;
 }
 
-
+// IMPORTANT: Assumes caller holds Scheduler::mtx_
 void Scheduler::notifyDependents(TaskID taskId){
   safe_print(("Task: " + std::to_string(taskId) + " is: " + taskStateName[int(tasks_[taskId]->getState())] + " and it's notifying dependents"), "Scheduler", t_Verbosity::INFO);
 
@@ -35,7 +36,7 @@ void Scheduler::notifyDependents(TaskID taskId){
     safe_print(("Task with id: " + std::to_string(taskId) + " couldn't be found in tasks map"), "Scheduler", t_Verbosity::ERROR);
     return; 
   }
-  auto completed_task_ptr = tasks_[taskId];
+  auto completed_task_ptr = completed_task_it->second;
 
   if(completed_task_ptr->getState() == t_TaskState::FAILED){
     // Propagate failure
@@ -105,7 +106,8 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
   std::lock_guard<std::mutex> lck(mtx_);
   safe_print(("Adding new task, obtained mutex"), "Scheduler", t_Verbosity::DEBUG);
   // We load current value of id, to check if adding would induce dependencies (it won't in backward dependencies, but to be consistent)
-  TaskID currentId = id_.load();
+  // We don't need to do that, because small gaps don't make a problem for us
+  TaskID currentId = id_.fetch_add(1);
   // Check weather there is depndency in the arguments that is not already in tasks. We cannot depend on task that wasnt created
   // We need to do checking of cyclical dependencies here, because we don't want to insert them into the task map
   // Tbd : optimize, it probably isn't best to copy, but we need new entries in order to check cycles, rigt?
@@ -127,11 +129,10 @@ TaskID Scheduler::addTask(std::function<void()> func, const std::vector<TaskID>&
       for(auto id : cycle)
         cyc = cyc + ", " + std::to_string(id);
       safe_print(("Cycle detected when inserting new dependency: " + std::to_string(depends_on) + " cycle: " + cyc), "Scheduler", t_Verbosity::ERROR);
-      return -2;
+      return -3;
     }
   }
   // If we come to here, there are no dependencies
-  id_++;
   safe_print(("New task id: " + std::to_string(currentId)), "Scheduler", t_Verbosity::INFO);
   try{
     // C++14 : std::make_shared() in C++14
@@ -282,6 +283,7 @@ void Scheduler::stop(t_StopWay wayToStop){
     }
     safe_print("End of stop in scheduler", "Scheduler", t_Verbosity::NONE);    
   }
+  state_ = STOPPED;
 }
 
 bool Scheduler::waitTasksToEnd(){
@@ -303,12 +305,13 @@ bool Scheduler::waitTasksToEnd(){
       // Todo : implement end of life thread -> One thread to run to "cleanup" everything (or wait for all processes to finish?)
       safe_print(("Stop was requested, aborting wait for tasks to finish"), "Scheduler", t_Verbosity::NONE);
       lck.unlock();
+      return false;
     }
 
     safe_print(("All tasks currently present[" + std::to_string(totalTask) + "]finished. Completed[" + std::to_string(complTask) + "], Failed[" + std::to_string(failTask) + "], Cancelled[" + std::to_string(cancTask) + "]"), "Scheduler", t_Verbosity::INFO);
   }
 
-  return false;
+  return true;
 }
 
 // std::shared_ptr<Task> Scheduler::createTask(std::function<void()> func, const std::vector<TaskID> &dependencies){
