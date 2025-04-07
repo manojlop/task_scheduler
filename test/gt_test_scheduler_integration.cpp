@@ -87,3 +87,36 @@ TEST_F(SchedulerTest_Integration_Test, SimpleDependencyOrder) {
 
   // Stop is called by TearDown
 }
+
+TEST_F(SchedulerTest_Integration_Test, AllTasksCompleteLoadTest){
+  createScheduler(8);
+  const int num_tasks = 5000;
+  std::atomic<int> completed_count{0};
+
+  std::vector<TaskID> ids(num_tasks);
+
+  scheduler_->start();
+
+  // Add tasks (some with simple dependencies)
+  for(int i = 0; i < num_tasks; i++){
+    std::vector<TaskID> deps;
+    if(i > 1) {
+      srand(time(0));
+      int num_of_dep = rand() % 10;
+      for(int j = 0; j < num_of_dep; j++) {
+        deps.push_back(ids[rand() % i]);
+      }
+    }
+    auto work = [&completed_count]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1 + (rand() % 10)));
+      completed_count.fetch_add(1, std::memory_order_relaxed);
+    };
+    ids[i] = scheduler_->addTask(work, deps);
+  }
+
+  scheduler_->waitTasksToEnd();
+
+  scheduler_->stop();
+
+  EXPECT_EQ(completed_count.load(), num_tasks);
+}
