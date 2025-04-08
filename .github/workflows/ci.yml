@@ -1,0 +1,54 @@
+# .github/workflows/ci.yml
+
+# Name which is shown in github actions UI
+name: Scheduler Build and Test
+
+# Trigger Events (on) - when should workflow run
+on: 
+  # Run on pushes to main
+  push:
+    branches: [main]
+  # Run on pull requests targeting 'main' branch
+  pull_request:
+    branches: [main]
+
+  # Allow manual triggering from Actions tab
+  workflow_dispatch:
+
+# Jobs: Tasks the workflow will perform - Can run in parallel or sequence
+jobs:
+  # Single job needed
+  build_and_test:
+    # Runner env (VM env) - can be ubuntu-latest, windows-latest, macos-latest
+    runs-on: ubuntu-latest
+
+    # Steps - sequence of tasks executed within the job
+    steps:
+      # Get the code
+      # Uses pre-built 'action' from marketplace to check out repository code
+      - name: Checkout code
+        uses: actions/checkout@v4 # Current version
+
+      # Set up build environment (commands depend on runs-on OS)
+      - name: Install Dependencies(Ubuntu)
+        run: | # Multi-line script - Essential build tools
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential cmake ninja-build 
+
+      # Configure Build with CMake
+      # Creates a build directory and runs CMake to generate build files (using Ninja)
+      - name: Configure CMake
+        run: cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Debug # Configure a Debug build to include tests
+
+      # Build the project
+      # Compile code (library, test executable) using generated build files
+      - name: Build Project
+        run: cmake --build build --config Debug # Build Debug configuration
+
+      # Run tests
+      # Execute the tests. Assumes CMake + GTest setup that uses CTest
+      - name: Run Tests With CTest
+        working-directory: ./build # Execute from build directory
+        # '-C Debug' ensures it runs the Debug configuration tests.
+        # '--output-on-failure' prints test output only if a test fails.
+        run: ctest -C Debug --output-on-failure
