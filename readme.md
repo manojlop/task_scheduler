@@ -197,6 +197,22 @@ The project includes:
 
 See the [DOCUMENTATION.md](doc/DOCUMENTATION.md) for more details on the testing strategy.
 
+## Continuous Integration (CI)
+
+[![Build Status](https://github.com/manojlop/task_scheduler/actions/workflows/ci.yml/badge.svg)](https://github.com/manojlop/task_scheduler/actions/workflows/ci.yml) 
+
+This project uses **GitHub Actions** for Continuous Integration. A workflow (`.github/workflows/ci.yml`) is configured to automatically build and test the project on every push or pull request targeting the `main` branch.
+
+**The CI pipeline:**
+
+1.  Checks out the source code.
+2.  Sets up an Ubuntu environment with necessary build tools (CMake, GCC, Ninja).
+3.  Configures the project using CMake (Debug build).
+4.  Builds the project executables, including the test suite.
+5.  Runs the automated tests using CTest.
+
+This ensures that code changes integrate correctly and pass all tests in a clean environment, helping maintain code quality and stability. For more details on the workflow steps, see the [CI Workflow section](DOCUMENTATION.md#64-continuous-integration-ci-workflow-githubworkflowsciyml) in the main documentation.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to open an issue to discuss potential changes or submit a pull request. 

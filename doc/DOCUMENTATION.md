@@ -641,6 +641,45 @@ ctest
 ./bin/MyTests --gtest_filter=SchedulerTest_Integration_Test.SimpleDependencyOrder # Run specific test case
 ```
 
+### 6.4 Continuous Integration (CI) Workflow (`.github/workflows/ci.yml`)
+
+This project utilizes GitHub Actions for Continuous Integration (CI) to automatically build and test the code on every push or pull request targeting the `main` branch. This helps ensure code quality, compilation success, and functional correctness.
+
+**Workflow Overview:**
+
+*   **Name:** `Scheduler Build and Test` (Displayed in GitHub Actions UI).
+*   **Triggers:** The workflow runs automatically on:
+    *   Pushes to the `main` branch.
+    *   Pull Requests targeting the `main` branch (on creation and updates).
+    *   Manual trigger via the GitHub Actions tab (`workflow_dispatch`).
+*   **Environment:** The job runs on the latest available Ubuntu virtual machine (`runs-on: ubuntu-latest`).
+
+**Workflow Steps (`build_and_test` job):**
+
+1.  **Checkout Code:**
+    *   Uses the standard `actions/checkout@v4` action to fetch the repository code into the runner environment.
+2.  **Install Dependencies:**
+    *   Updates the package list (`apt-get update`).
+    *   Installs essential build tools required for compilation on Ubuntu: `build-essential` (includes GCC, make, etc.), `cmake`, and `ninja-build` (an alternative, often faster build system generator used with CMake).
+3.  **Configure CMake:**
+    *   Runs `cmake` to configure the project:
+        *   `-B build`: Specifies `build` as the build directory.
+        *   `-S .`: Specifies the current directory (`.`) as the source directory.
+        *   `-G Ninja`: Instructs CMake to generate build files for the Ninja build system.
+        *   `-DCMAKE_BUILD_TYPE=Debug`: Configures a Debug build, which typically includes debug symbols and enables the test suite compilation.
+4.  **Build Project:**
+    *   Runs `cmake --build build --config Debug` to compile the project (including the `MyTests` executable) using the configuration generated in the previous step.
+5.  **Run Tests With CTest:**
+    *   Changes to the `build` directory (`working-directory: ./build`).
+    *   Executes `ctest -C Debug --output-on-failure`:
+        *   `ctest`: CMake's test driver program.
+        *   `-C Debug`: Ensures that tests associated with the `Debug` configuration are run.
+        *   `--output-on-failure`: CTest will only print the detailed output from tests if one or more tests fail, keeping the logs cleaner on success.
+
+**Goal:**
+
+The primary goal of this CI workflow is to provide rapid feedback on code changes by verifying that the project compiles successfully and all automated tests (discovered by CTest, which includes the GoogleTest suite) pass in a clean, standardized environment. Passing this workflow is a strong indicator that the changes haven't introduced compilation errors or regressions detected by the test suite.
+
 ## 7. Build System (`CMakeLists.txt`)
 
 ### 7.1. Overview
